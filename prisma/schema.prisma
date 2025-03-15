@@ -1,0 +1,180 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String           @id @default(uuid())
+  email          String   @unique
+  password       String?
+  name           String?
+  refreshToken   String?
+  provider       String?  // 'local', 'google', 'facebook', etc
+  providerId     String?  // ID dari provider (Google ID, Facebook ID, dll)
+  isVerified     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  notes     Note[]
+  noteedits NoteEditAccess[]
+
+
+  VerificationCode VerificationCode[]
+}
+
+model VerificationCode {
+  id        Int      @id @default(autoincrement())
+  code      String
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// note
+model Note {
+  id        String           @id @default(uuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String
+  content   Json
+  status    NoteStatus       @default(Private)
+  edittable Boolean
+  noteEdits NoteEditAccess[]
+
+  Table     Table[]
+  PostGroup PostGroup[]
+}
+
+enum NoteStatus {
+  Public
+  Private
+}
+
+model NoteEditAccess {
+  id     String @id @default(uuid())
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+}
+
+// end note
+
+// table
+model Table {
+  id           String @id @default(uuid())
+  sourceNoteId String // digunakan untuk mengindikasikan table ini dibuat dari note mana
+  note         Note   @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
+  name         String
+  cols         Col[]
+  rows         Row[]
+}
+
+model Col {
+  id      String    @id @default(uuid())
+  tableId String
+  table   Table     @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  title   String
+  rowData RowData[]
+}
+
+model Row {
+  id        String    @id @default(uuid())
+  tableId   String
+  table     Table     @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  rowNumber Int
+  rowData   RowData[]
+}
+
+model RowData {
+  id      String @id @default(uuid())
+  rowId   String
+  row     Row    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  colId   String
+  col     Col    @relation(fields: [colId], references: [id], onDelete: Cascade)
+  content String
+}
+
+// end table
+
+// post
+model PostGroup {
+  id             String          @id @default(uuid())
+  note           Note            @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
+  sourceNoteId   String
+  name           String
+  posts          Post[]
+  postGroupPosts PostGroupPost[]
+  ParentTag      ParentTag[]
+}
+
+model PostGroupPost {
+  postGroupId String
+  postId      String
+
+  postGroup PostGroup @relation(fields: [postGroupId], references: [id], onDelete: Cascade)
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([postGroupId, postId])
+}
+
+model Post {
+  id                String          @id @default(uuid())
+  sourcePostGroupId String // digunakan untuk mengindikasikan post ini dibuat dari postgroup mana
+  postGroup         PostGroup       @relation(fields: [sourcePostGroupId], references: [id], onDelete: Cascade)
+  title             String
+  content           String
+  postGroupPosts    PostGroupPost[]
+  postImages        PostImage[]
+  PostTag           PostTag[]
+}
+
+model PostImage {
+  id          String @id @default(uuid())
+  postId      String
+  post        Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  url         String
+  imageNumber Int
+}
+
+// end post
+
+// post tag
+model ParentTag {
+  id          String    @id @default(uuid())
+  postGroupId String
+  postGroup   PostGroup @relation(fields: [postGroupId], references: [id], onDelete: Cascade)
+  name        String
+  children    Tag[]
+}
+
+model Tag {
+  id          String    @id @default(uuid())
+  name        String
+  parentTagId String
+  parent      ParentTag @relation(fields: [parentTagId], references: [id], onDelete: Cascade)
+  PostTag     PostTag[]
+}
+
+model PostTag {
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+// end post tag
