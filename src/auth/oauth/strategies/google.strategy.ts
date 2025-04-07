@@ -11,10 +11,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         private oauthService: OAuthService,
     ) {
         super({
-            clientID: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: process.env.GOOGLE_CALLBACK_URL,
-            scope: ['email', 'profile'],
+            clientID: configService.get<string>('oauth.google.clientID'),
+            clientSecret: configService.get<string>('oauth.google.clientSecret'),
+            callbackURL: configService.get<string>('oauth.google.callbackURL'),
+            scope: configService.get<string[]>('oauth.google.scope'),
         });
     }
 
@@ -24,6 +24,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             providerId: profile.id,
             email: profile.emails[0].value,
             name: profile.displayName,
+            avatar: profile.photos[0].value,
             isVerified: true, // Anggap email sudah diverifikasi oleh Google
         });
         return user;

@@ -14,33 +14,50 @@ datasource db {
 }
 
 model User {
-  id        String           @id @default(uuid())
-  email          String   @unique
-  password       String?
-  name           String?
-  refreshToken   String?
-  provider       String?  // 'local', 'google', 'facebook', etc
-  providerId     String?  // ID dari provider (Google ID, Facebook ID, dll)
-  isVerified     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String
+  password     String?
+  name         String
+  avatar       String?
+  // refreshToken String?
+  provider     String? // 'local', 'google', 'facebook', etc
+  providerId   String? // ID dari provider (Google ID, Facebook ID, dll)
+  isVerified   Boolean  @default(false)
+  lastResendAt DateTime?
+  resetToken   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   notes     Note[]
   noteedits NoteEditAccess[]
+  noteUserOpen NoteUserOpen[]
 
-
-  VerificationCode VerificationCode[]
+  // VerificationCode VerificationCode[]
+  
+  RefreshToken RefreshToken[]
 }
 
-model VerificationCode {
-  id        Int      @id @default(autoincrement())
-  code      String
-  expiresAt DateTime
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model RefreshToken {
+  id           String   @id @default(uuid())
+  userId       String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
 }
+
+// model VerificationCode {
+//   id        Int      @id @default(autoincrement())
+//   code      String
+//   expiresAt DateTime
+//   userId    String
+//   user      User     @relation(fields: [userId], references: [id])
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
 
 // note
 model Note {
@@ -48,18 +65,39 @@ model Note {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   title     String
-  content   Json
-  status    NoteStatus       @default(Private)
-  edittable Boolean
-  noteEdits NoteEditAccess[]
+  content   Json?
+  status    NoteStatus       @default(private)
+  editable  Editable         @default(me)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  noteEdits NoteEditAccess[]
   Table     Table[]
   PostGroup PostGroup[]
+  noteUserOpen NoteUserOpen[]
+}
+
+model NoteUserOpen {
+  id        String           @id @default(uuid())
+  openAt    DateTime         @default(now())
+  note      Note             @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([openAt])
 }
 
 enum NoteStatus {
-  Public
-  Private
+  public
+  private
+  access
+}
+
+enum Editable {
+  me
+  access
+  everyone
 }
 
 model NoteEditAccess {
@@ -69,7 +107,6 @@ model NoteEditAccess {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 }
-
 // end note
 
 // table

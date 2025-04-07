@@ -1,0 +1,84 @@
+routes:
+  auth:
+    register:
+      description: melakukan register user
+      request:
+        body:
+          email: string
+          password: string
+          name: string
+
+    verify:
+      description: melakukan verifikasi email
+      request:
+        body:
+          verifyToken: string
+          socketToken: string
+
+    resend-verification:
+      description: melakukan pengiriman ulang verifikasi email
+      request:
+        body:
+          resendToken: string
+
+    user-status:
+      description: melakukan pengecekan status user
+      request:
+        body:
+          socketToken: string
+
+    forgot-password:
+      description: melakukan pemulihan password
+      request:
+        body:
+          email: string
+
+    reset:
+      description: melakukan reset password
+      request:
+        body:
+          resetToken: string
+          password: string
+
+    login-token:
+      description: melakukan login dengan token
+      request:
+        body:
+          verifyToken: string
+
+    login:
+      description: melakukan login
+      request:
+        body:
+          email: string
+          password: string
+
+    refresh:
+      description: melakukan refresh token
+      request:
+        cookie:
+          refreshToken: string
+
+    logout:
+      description: melakukan logout
+      request:
+        body:
+          all: boolean
+        cookie:
+          refreshToken: string
+        req.user:
+          id: string
+
+    google:
+      description: melakukan login dengan google
+      request:
+        body:
+          token: string
+
+    callback:
+      description: melakukan callback google
+      request:
+        body:
+          token: string
+
+

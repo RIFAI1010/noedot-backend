@@ -15,6 +15,12 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '../..', 'uploads'), {
     prefix: '/uploads/',
   });
-  await app.listen(process.env.PORT ?? 3000);
+  app.enableCors({
+    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3044', 'http://192.168.18.121:3000'], 
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  })
+  await app.listen(process.env.PORT ?? 3850);
 }
 bootstrap();

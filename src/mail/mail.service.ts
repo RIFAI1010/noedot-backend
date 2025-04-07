@@ -1,20 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ConfigService } from '@nestjs/config';
+import { FRONTEND_URL } from 'src/config';
 
 @Injectable()
 export class MailService {
-    constructor(private mailerService: MailerService) { }
+    constructor(private mailerService: MailerService, private configService: ConfigService) { }
 
-    async sendVerificationEmail(to: string, code: string) {
+    async sendVerificationEmail(to: string, name: string, token: string, socketToken: string) {
+        const url = `${FRONTEND_URL}/verify?token=${token}&socketToken=${socketToken}`;
         await this.mailerService.sendMail({
             to,
-            subject: 'Verifikasi Email',
+            subject: 'Email Verification',
             html: `
-        <h1>Verifikasi Email Anda</h1>
-        <p>Terima kasih telah mendaftar. Berikut adalah kode verifikasi Anda:</p>
-        <h2>${code}</h2>
-        <p>Kode ini akan kedaluwarsa dalam 24 jam.</p>
+        <h1>Verify Your Email</h1>
+        <p>Hi ${name},</p>
+        <p>Thank you for registering. You have registered as <strong>${name}</strong>. Here is your verification code:</p>
+        <a href="${url}">Verify</a>
+        <p>This code will expire in 1 hour.</p>
     `,
+        });
+    }
+
+    async sendResetPasswordEmail(to: string, name: string, token: string) {
+        const url = `${FRONTEND_URL}/reset?token=${token}`;
+        await this.mailerService.sendMail({
+            to,
+            subject: 'Reset Password',
+            html: `
+        <h1>Reset Your Password</h1>
+        <p>Hi ${name},</p>
+        <p>You have requested to reset your password. Here is your reset code:</p>
+        <a href="${url}">Reset</a>
+        <p>This code will expire in 1 hour.</p>
+        `,
         });
     }
 }

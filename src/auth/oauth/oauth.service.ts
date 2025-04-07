@@ -1,26 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+// import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
-import { generateRefreshToken } from 'src/common/utils/jwt.util';
+import { generateAccessToken, generateRefreshToken } from 'src/common/utils/jwt.util';
+import { access } from 'fs';
 
 interface OAuthUserData {
     provider: string;
     providerId: string;
     email: string;
-    name?: string;
+    name: string;
     isVerified: boolean;
+    avatar: string;
 }
 
 @Injectable()
 export class OAuthService {
     constructor(
         private prisma: PrismaService,
-        private jwtService: JwtService,
+        // private jwtService: JwtService,
     ) { }
 
     async validateOAuthUser(userData: OAuthUserData) {
-        const { provider, providerId, email, name, isVerified } = userData;
+        const { provider, providerId, email, name, isVerified, avatar } = userData;
+        // console.log(userData.avatar)
 
         // Cari user berdasarkan provider dan providerId
         let user = await this.prisma.user.findFirst({
@@ -41,6 +44,7 @@ export class OAuthService {
                     provider,
                     providerId,
                     isVerified,
+                    avatar,
                 },
             });
         } else if (user.provider !== provider) {
@@ -53,6 +57,7 @@ export class OAuthService {
                     provider,
                     providerId,
                     isVerified: isVerified || user.isVerified,
+                    avatar,
                 },
             });
         }
@@ -61,13 +66,18 @@ export class OAuthService {
         return user;
     }
 
-    async generateTokens(userId: string) {
+    async generateTokens(userId: string, deviceInfo: string, ipAddress: string) {
         // Buat payload untuk JWT
-        const payload = { sub: userId };
-
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+        })
+        if (!user) {
+            throw new Error('User not found');
+        }
+        const payload = { id: user.id, email: user.email, name: user.name };
         // Generate refresh token
-        const refreshToken = generateRefreshToken(payload);
-
+        const refreshToken = generateRefreshToken({ id: user.id });
+        const accessToken = generateAccessToken(payload);
         // Simpan refresh token di database
         // await this.prisma.refreshToken.create({
         //     data: {
@@ -77,10 +87,19 @@ export class OAuthService {
         //     },
         // });
 
-        await this.prisma.user.update({
-            where: { id: userId },
-            data: { refreshToken },
+        // await this.prisma.user.update({
+        //     where: { id: userId },
+        //     data: { refreshToken },
+        // });
+        await this.prisma.refreshToken.create({
+            data: {
+                userId: userId,
+                refreshToken,
+                deviceInfo,
+                ipAddress,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 hari
+            },
         });
-        return { refreshToken };
+        return { refreshToken, accessToken, name: user.name, avatar: user.avatar };
     }
 }

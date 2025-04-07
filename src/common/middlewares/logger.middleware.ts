@@ -9,7 +9,6 @@ import * as fs from 'fs';
 export class LoggerMiddleware implements NestMiddleware {
     private logger: any;
 
-
     constructor() {
         // Membuat direktori logs jika belum ada
         const logDirectory = join(process.cwd(), 'logs');

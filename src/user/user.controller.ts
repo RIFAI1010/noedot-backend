@@ -1,17 +1,24 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
 import { UserService } from './user.service';
+import { AuthMiddleware } from 'src/common/middlewares/auth.middleware';
+import { UserAccessType } from 'src/common/utils/jwt.util';
+import { Auth } from 'src/common/decorators/user.decorator';
 
-@Controller('users')
+@Controller('user')
 export class UserController {
     constructor(private readonly userService: UserService) { }
 
-    @Get()
-    getUsers() {
-        return this.userService.getAllUsers();
+    @Get('')
+    @UseGuards(AuthMiddleware)
+    async findAll() {
+        return 'find all users';
     }
 
-    @Post()
-    createUser(@Body() body: { name: string; email: string }) {
-        return this.userService.createUser(body.name, body.email);
+    @Get('search')
+    @UseGuards(AuthMiddleware)
+    async search(
+        @Auth() user: UserAccessType,
+        @Query() query: { q: string }) {
+        return this.userService.search(user.id, query.q);
     }
 }
