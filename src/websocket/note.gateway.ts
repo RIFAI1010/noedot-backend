@@ -117,7 +117,6 @@ export class NoteGateway implements OnGatewayConnection {
                 //     continue;
                 // }
                 const { hasAccess, canEdit } = accessResult;
-                data.owner = data.ownerId === jwtUserId;
                 data.canEdit = canEdit;
                 // Kirim notifikasi ke socket yang masih memiliki akses
                 socket.emit(`joinedNote_${noteId}`, data);

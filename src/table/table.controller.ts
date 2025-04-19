@@ -37,10 +37,10 @@ export class TableController {
     @Get()
     getTables(
         @Auth() user: UserAccessType,
-        @Query() query: { limit?: number, page?: number, sort?: string, my?: string }
+        @Query() query: { sort?: string, filter?: string }
 
     ) {
-        return this.tableService.getTables(user.id, parseInt(query.limit as any), parseInt(query.page as any), (query.sort ?? undefined), (query.my === 'true'));
+        return this.tableService.getTables(user.id, (query.filter ?? undefined), (query.sort ?? undefined));
     }
 
 

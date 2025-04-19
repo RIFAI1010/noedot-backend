@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { NoteService } from "./note.service";
-import { CreateNoteDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { CreateNoteDto, UpdateBlockPositionDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
 import { UserAccessType } from "src/common/utils/jwt.util";
 import { Auth } from "src/common/decorators/user.decorator";
 
@@ -56,5 +56,31 @@ export class NoteController {
         @Param('id') id: string
     ) {
         return this.noteService.getNoteBlocks(id, user.id);
+    }
+    
+    @Put(':id/block/:blockId/position')
+    updateBlockPosition(
+        @Param('id') id: string,
+        @Param('blockId') blockId: string,
+        @Body() data: UpdateBlockPositionDto,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.updateBlockPosition(id, blockId, data.direction, user.id);
+    }
+
+    @Post(':id/favorite')
+    favoriteNote(
+        @Param('id') id: string,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.favoriteNote(id, user.id);
+    }
+
+    @Delete(':id/favorite')
+    unfavoriteNote(
+        @Param('id') id: string,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.unfavoriteNote(id, user.id);
     }
 }

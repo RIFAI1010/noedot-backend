@@ -45,3 +45,14 @@ export class UpdateNoteTitleDto {
     @IsString()
     title: string;
 }
+
+export enum Direction {
+    UP = 'UP',
+    DOWN = 'DOWN'
+}
+
+export class UpdateBlockPositionDto {
+    @IsNotEmpty()
+    @IsEnum(Direction)
+    direction: Direction;
+}

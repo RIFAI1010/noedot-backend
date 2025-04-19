@@ -5,9 +5,10 @@ import { AuthMiddleware } from "src/common/middlewares/auth.middleware";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaService } from "src/prisma/prisma.service";
 import { WebsocketModule } from "src/websocket/websocket.module";
+import { NoteModule } from "src/note/note.module";
 
 @Module({
-    imports: [ConfigModule, WebsocketModule],
+    imports: [ConfigModule, WebsocketModule, NoteModule],
     controllers: [TableController],
     providers: [TableService, PrismaService],
     exports: [TableService]
