@@ -1,12 +1,19 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
-import { CreateNoteDto, UpdateNoteDto } from "./dto/note.dto";
-import { Editable, Note, NoteStatus, NoteUserOpen } from "@prisma/client";
+import { CreateNoteDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { BlockType, Editable, Note, NoteStatus, NoteUserOpen } from "@prisma/client";
 import { User } from "@prisma/client";
-
+import { NoteGateway } from "src/websocket/note.gateway";
+import { UserGateway } from "src/websocket/user.gateway";
+import { TableGateway } from "src/websocket/table.gateway";
 @Injectable()
 export class NoteService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly noteGateway: NoteGateway,
+        private readonly userGateway: UserGateway,
+        private readonly tableGateway: TableGateway
+    ) { }
 
     async createNote(data: CreateNoteDto, userId: string) {
         const note = await this.prisma.note.create({
@@ -41,6 +48,7 @@ export class NoteService {
         if (!note) {
             throw new NotFoundException('Note not found');
         }
+        
         // if (note.status === NoteStatus.private && note.userId !== userId) {
         //     throw new ForbiddenException('You are not allowed to update this note');
         // }
@@ -58,6 +66,10 @@ export class NoteService {
         // Dapatkan user yang sudah ada di database
         const existingUsers = note.noteEdits.map(edit => edit.userId);
         // Validasi semua userIds terlebih dahulu
+        for (const user of note.noteEdits) {
+            // await this.noteGateway.sendUserAccessNoteUpdated(user.userId);
+            await this.userGateway.sendUserUpdated(user.userId);
+        }
         const validUsers = await this.prisma.user.findMany({
             where: {
                 id: {
@@ -81,6 +93,7 @@ export class NoteService {
                     userId: user,
                 },
             });
+            // await this.noteGateway.sendUserAccessNoteUpdated(user);
         }
         // Hapus user yang tidak ada di data.userAccess
         if (usersToRemove.length > 0) {
@@ -92,6 +105,9 @@ export class NoteService {
                     }
                 }
             });
+            for (const user of usersToRemove) {
+                // await this.noteGateway.sendUserAccessNoteUpdated(user);
+            }
         }
 
         const updatedNote = await this.prisma.note.update({
@@ -100,8 +116,40 @@ export class NoteService {
                 title: data.title,
                 status: data.status,
                 editable: data.editable
+            },
+            include: {
+                noteBlocks: true
             }
         });
+
+        await this.noteGateway.sendNoteUpdated(id, userId, {
+            id,
+            title: data.title,
+            status: data.status,
+            editable: data.editable,
+            ownerId: note.userId,
+            updatedAt: new Date(),
+            socketAction: 'updateNote'
+        });
+
+        for (const block of updatedNote.noteBlocks) {
+            if (block.type === BlockType.table && block.referenceId) {
+                const tableNote = await this.prisma.tableNote.findFirst({   
+                    where: { id: block.referenceId },
+                    include: {
+                        table: true
+                    }
+                });
+                if (tableNote && tableNote.table) {
+                    await this.tableGateway.sendTableUpdated(tableNote.table.id, userId, {
+                        id: tableNote.table.id,
+                        updatedAt: new Date(),
+                        socketAction: 'updateNote'
+                    });
+                }
+            }
+        }
+
         return updatedNote;
     }
 
@@ -134,7 +182,7 @@ export class NoteService {
                 where: {
                     OR: [
                         { userId },
-                        { noteEdits: { some: { userId } } }
+                        { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
                     ]
                 },
                 include: {
@@ -207,11 +255,143 @@ export class NoteService {
             name: edit.user.name,
             email: edit.user.email
         }));
+        const noteBlocks = await this.prisma.noteBlock.findMany({
+            where: {
+                noteId: id
+            },
+            orderBy: { position: 'asc' }
+        });
+
+        // Ambil table untuk setiap note block yang bertipe table
+        for (const block of noteBlocks) {
+            if (block.type === BlockType.table && block.referenceId) {
+                const tableNote = await this.prisma.tableNote.findFirst({
+                    where: { id: block.referenceId },
+                    include: {
+                        table: {
+                            include: {
+                                cols: true,
+                                rows: {
+                                    include: {
+                                        rowData: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                if (tableNote) {
+                    block['table'] = tableNote.table;
+                }
+            }
+        }
+
         return {
             ...note,
             canEdit,
             owner,
-            noteEdits: users
+            noteEdits: users,
+            noteBlocks
+        }
+    }
+
+    async updateNoteTitle(id: string, data: UpdateNoteTitleDto, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: { id },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+        const updatedNote = await this.prisma.note.update({
+            where: { id },
+            data: {
+                title: data.title
+            }
+        });
+
+        // Kirim notifikasi websocket
+        await this.noteGateway.sendNoteUpdated(id, userId, {
+            id,
+            title: data.title,
+            updatedAt: new Date(),
+            socketAction: 'updateNoteTitle'
+        });
+
+        return { message: 'Note title updated successfully' };
+        return {
+            ...updatedNote,
+            canEdit,
+            owner
+        };
+    }
+
+    async getNoteBlocks(id: string, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: { id },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        const noteBlocks = await this.prisma.noteBlock.findMany({
+            where: { noteId: id },
+            orderBy: { position: 'asc' }
+        });
+
+        // Ambil table untuk setiap note block yang bertipe table
+        for (const block of noteBlocks) {
+            if (block.type === BlockType.table && block.referenceId) {
+                const tableNote = await this.prisma.tableNote.findFirst({
+                    where: { id: block.referenceId },
+                    include: {
+                        table: true
+                    }
+                });
+                
+                if (tableNote && tableNote.table) {
+                    block['details'] = tableNote.table;
+                }
+            }
+            // if (block.type === BlockType.document && block.referenceId) {
+        }
+
+        return {
+            noteBlocks,
+            canEdit,
+            owner
         }
     }
 }

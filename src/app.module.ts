@@ -15,9 +15,10 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { OAuthModule } from './auth/oauth/oauth.module';
 import { OAuthController } from './auth/oauth/oauth.controller';
 import { NoteModule } from './note/note.module';
+import { TableModule } from './table/table.module';
 
 @Module({
-  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule],
+  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule],
   controllers: [AppController, AuthController, OAuthController, UserController],
   providers: [AppService, UserService, {
     provide: APP_INTERCEPTOR,

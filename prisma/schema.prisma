@@ -14,76 +14,83 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   email        String
   password     String?
   name         String
   avatar       String?
-  // refreshToken String?
   provider     String? // 'local', 'google', 'facebook', etc
   providerId   String? // ID dari provider (Google ID, Facebook ID, dll)
-  isVerified   Boolean  @default(false)
+  isVerified   Boolean   @default(false)
   lastResendAt DateTime?
   resetToken   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  notes     Note[]
-  noteedits NoteEditAccess[]
+  notes        Note[]
+  noteedits    NoteEditAccess[]
   noteUserOpen NoteUserOpen[]
 
-  // VerificationCode VerificationCode[]
-  
   RefreshToken RefreshToken[]
 }
 
 model RefreshToken {
   id           String   @id @default(uuid())
   userId       String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshToken String
   deviceInfo   String?
   ipAddress    String?
   expiresAt    DateTime
   createdAt    DateTime @default(now())
-
 }
-
-// model VerificationCode {
-//   id        Int      @id @default(autoincrement())
-//   code      String
-//   expiresAt DateTime
-//   userId    String
-//   user      User     @relation(fields: [userId], references: [id])
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// }
 
 // note
 model Note {
-  id        String           @id @default(uuid())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String     @id @default(uuid())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   title     String
-  content   Json?
-  status    NoteStatus       @default(private)
-  editable  Editable         @default(me)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status    NoteStatus @default(private)
+  editable  Editable   @default(me)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
-  noteEdits NoteEditAccess[]
-  Table     Table[]
-  PostGroup PostGroup[]
+  noteEdits  NoteEditAccess[]
+  noteBlocks NoteBlock[]
+
+  documents  Document[]
+  Table      Table[]
+  tableNotes TableNote[]
+
+  PostGroup    PostGroup[]
   noteUserOpen NoteUserOpen[]
 }
 
+model NoteBlock {
+  id          String    @id @default(uuid())
+  noteId      String
+  note        Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  type        BlockType
+  referenceId String?
+  position    Int
+
+  @@index([noteId, position, referenceId])
+}
+
+enum BlockType {
+  document
+  table
+  postGroup
+}
+
 model NoteUserOpen {
-  id        String           @id @default(uuid())
-  openAt    DateTime         @default(now())
-  note      Note             @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  noteId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
+  id     String   @id @default(uuid())
+  openAt DateTime @default(now())
+  note   Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
   @@index([openAt])
 }
@@ -107,23 +114,48 @@ model NoteEditAccess {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 }
+
 // end note
 
+// document
+model Document {
+  id           String   @id @default(uuid())
+  sourceNoteId String // digunakan untuk mengindikasikan document ini dibuat dari note mana
+  note         Note     @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
+  name         String
+  content      Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// end document
 // table
 model Table {
-  id           String @id @default(uuid())
+  id           String   @id @default(uuid())
   sourceNoteId String // digunakan untuk mengindikasikan table ini dibuat dari note mana
-  note         Note   @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
-  name         String
+  note         Note     @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   cols         Col[]
   rows         Row[]
+
+  tableNotes TableNote[]
+}
+
+model TableNote {
+  id      String @id @default(uuid())
+  tableId String?
+  table   Table? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  noteId  String
+  note    Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
 }
 
 model Col {
   id      String    @id @default(uuid())
   tableId String
   table   Table     @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  title   String
+  title   String?
   rowData RowData[]
 }
 
@@ -141,7 +173,7 @@ model RowData {
   row     Row    @relation(fields: [rowId], references: [id], onDelete: Cascade)
   colId   String
   col     Col    @relation(fields: [colId], references: [id], onDelete: Cascade)
-  content String
+  content String?
 }
 
 // end table
@@ -152,6 +184,8 @@ model PostGroup {
   note           Note            @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
   sourceNoteId   String
   name           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   posts          Post[]
   postGroupPosts PostGroupPost[]
   ParentTag      ParentTag[]
@@ -173,6 +207,8 @@ model Post {
   postGroup         PostGroup       @relation(fields: [sourcePostGroupId], references: [id], onDelete: Cascade)
   title             String
   content           String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   postGroupPosts    PostGroupPost[]
   postImages        PostImage[]
   PostTag           PostTag[]

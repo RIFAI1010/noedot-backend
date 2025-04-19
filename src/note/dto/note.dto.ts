@@ -12,7 +12,7 @@ export class CreateNoteDto {
 
     @IsNotEmpty()
     @IsEnum(Editable)
-    editable?: Editable;
+    editable: Editable;
 
     @IsOptional()
     @IsArray()
@@ -24,18 +24,24 @@ export class CreateNoteDto {
 export class UpdateNoteDto {
     @IsNotEmpty()
     @IsString()
-    title?: string;
+    title: string;
 
     @IsNotEmpty()
     @IsEnum(NoteStatus)
-    status?: NoteStatus;
+    status: NoteStatus;
 
     @IsNotEmpty()
     @IsEnum(Editable)
-    editable?: Editable;
+    editable: Editable;
 
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
     userAccess?: string[];
+}
+
+export class UpdateNoteTitleDto {
+    @IsNotEmpty()
+    @IsString()
+    title: string;
 }

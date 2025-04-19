@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { NoteService } from "./note.service";
-import { CreateNoteDto, UpdateNoteDto } from "./dto/note.dto";
+import { CreateNoteDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
 import { UserAccessType } from "src/common/utils/jwt.util";
 import { Auth } from "src/common/decorators/user.decorator";
 
@@ -25,6 +25,15 @@ export class NoteController {
     ) {
         return this.noteService.updateNote(id, data, user.id);
     }
+    @Put(':id/title')
+    updateNoteTitle(
+        @Param('id') id: string,
+        @Body() data: UpdateNoteTitleDto,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.updateNoteTitle(id, data, user.id);
+    }
+
     @Get()
     getNotes(
         @Auth() user: UserAccessType,
@@ -39,5 +48,13 @@ export class NoteController {
         @Param('id') id: string
     ) {
         return this.noteService.getNote(user.id, id);
+    }
+
+    @Get(':id/blocks')
+    getNoteBlocks(
+        @Auth() user: UserAccessType,
+        @Param('id') id: string
+    ) {
+        return this.noteService.getNoteBlocks(id, user.id);
     }
 }

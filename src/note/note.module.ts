@@ -4,9 +4,10 @@ import { NoteService } from "./note.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { AuthMiddleware } from "src/common/middlewares/auth.middleware";
 import { ConfigModule } from "@nestjs/config";
+import { WebsocketModule } from "src/websocket/websocket.module";
 
 @Module({
-    imports: [ConfigModule],
+    imports: [ConfigModule, WebsocketModule],
     controllers: [NoteController],
     providers: [NoteService, PrismaService],
     exports: [NoteService]
