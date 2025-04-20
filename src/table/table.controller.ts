@@ -16,8 +16,17 @@ export class TableController {
         return this.tableService.createTable(data, user.id);
     }
 
+    @Post(':id/relation/:noteId')
+    addRelationTable(
+        @Param('id') id: string,
+        @Param('noteId') noteId: string,
+        @Auth() user: UserAccessType
+    ) {
+        return this.tableService.addRelationTable(id, noteId, user.id);
+    }
+
     @Put(':id/title')
-    updateNoteTitle(
+    updateTableName(
         @Param('id') id: string,
         @Body() data: UpdateTableNameDto,
         @Auth() user: UserAccessType
@@ -37,10 +46,10 @@ export class TableController {
     @Get()
     getTables(
         @Auth() user: UserAccessType,
-        @Query() query: { sort?: string, filter?: string }
+        @Query() query: { sort?: string, filter?: string, noteId?: string }
 
     ) {
-        return this.tableService.getTables(user.id, (query.filter ?? undefined), (query.sort ?? undefined));
+        return this.tableService.getTables(user.id, (query.filter ?? undefined), (query.sort ?? undefined), (query.noteId ?? undefined));
     }
 
 

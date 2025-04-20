@@ -16,10 +16,14 @@ import { OAuthModule } from './auth/oauth/oauth.module';
 import { OAuthController } from './auth/oauth/oauth.controller';
 import { NoteModule } from './note/note.module';
 import { TableModule } from './table/table.module';
+import { DocumentModule } from './document/document.module';
+import { DocumentController } from './document/document.controller';
+import { TableController } from './table/table.controller';
+import { NoteController } from './note/note.controller';
 
 @Module({
-  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule],
-  controllers: [AppController, AuthController, OAuthController, UserController],
+  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule, DocumentModule],
+  controllers: [AppController, AuthController, OAuthController, UserController, DocumentController, TableController, NoteController],
   providers: [AppService, UserService, {
     provide: APP_INTERCEPTOR,
     useClass: LoggingInterceptor,

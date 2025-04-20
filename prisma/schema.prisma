@@ -61,9 +61,10 @@ model Note {
   noteUserFavorites NoteUserFavorite[]
   noteBlocks NoteBlock[]
 
-  documents  Document[]
   Table      Table[]
   tableNotes TableNote[]
+  documents  Document[]
+  documentNotes DocumentNote[]
 
   PostGroup    PostGroup[]
   noteUserOpen NoteUserOpen[]
@@ -132,10 +133,21 @@ model Document {
   id           String   @id @default(uuid())
   sourceNoteId String // digunakan untuk mengindikasikan document ini dibuat dari note mana
   note         Note     @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
-  name         String
-  content      Json
+  name         String?
+  content      Json?
+  height       Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  documentNotes DocumentNote[]
+}
+
+model DocumentNote {
+  id      String @id @default(uuid())
+  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  documentId String?
+  note       Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId     String
 }
 
 // end document

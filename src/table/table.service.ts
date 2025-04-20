@@ -84,7 +84,87 @@ export class TableService {
             socketAction: 'addBlock',
             newBlock: noteBlock
         });
-        return {table, noteBlock};
+        return { table, noteBlock };
+    }
+
+    async addRelationTable(id: string, noteId: string, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: {
+                id: noteId,
+            },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                        user: {
+                            select: {
+                                id: true,
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+        const table = await this.prisma.table.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!table) {
+            throw new NotFoundException('Table not found');
+        }
+        if (table.sourceNoteId === note.id) {
+            throw new BadRequestException({
+                message: 'Table is already related to this note',
+                serverCode: 'COMPONENTS_ALREADY_RELATED_TO_NOTE'
+            });
+        }
+
+        const tableNote = await this.prisma.tableNote.create({
+            data: {
+                tableId: table.id,
+                noteId: note.id
+            }
+        })
+
+        const noteBlockOrder = await this.prisma.noteBlock.findFirst({
+            where: {
+                noteId: note.id,
+            },
+            orderBy: {
+                position: 'desc'
+            }
+        })
+        const noteBlock = await this.prisma.noteBlock.create({
+            data: {
+                noteId: note.id,
+                type: BlockType.table,
+                referenceId: tableNote.id,
+                position: noteBlockOrder ? noteBlockOrder.position + 1 : 1
+            }
+        })
+
+        await this.noteGateway.sendNoteUpdated(note.id, userId, {
+            id: note.id,
+            updatedAt: new Date(),
+            socketAction: 'addBlock',
+            newBlock: noteBlock
+        });
+        return { table, noteBlock };
     }
 
     async getTable(id: string, userId: string, detail?: boolean) {
@@ -251,131 +331,262 @@ export class TableService {
         return { message: 'Table name updated successfully' };
     }
 
-//     async getTables(userId: string, sort?: string, filter?: string) {
-//         if (filter === 'my') {
-//             const notesWithTables = await this.noteService.getNotesWithSourceTables(userId);
-//             return notesWithTables;
-//         } else {
-//             const tables = await this.prisma.table.findMany({
-//                 where: {
-//                     note: {
-//                         OR: [
-//                             { userId },
-//                             { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
-//                         ]
-//                     }
-//                 }
-//             });
-// // 
-//         }
-//     }
-    async getTables(userId: string, filter?: string, sort?: string) {
-        // Dapatkan notes dengan noteblocks
-        let notes: (Note & { noteBlocks: NoteBlock[] })[] = [];
+    //     async getTables(userId: string, sort?: string, filter?: string) {
+    //         if (filter === 'my') {
+    //             const notesWithTables = await this.noteService.getNotesWithSourceTables(userId);
+    //             return notesWithTables;
+    //         } else {
+    //             const tables = await this.prisma.table.findMany({
+    //                 where: {
+    //                     note: {
+    //                         OR: [
+    //                             { userId },
+    //                             { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
+    //                         ]
+    //                     }
+    //                 }
+    //             });
+    // // 
+    //         }
+    //     }
+    // async getTables(userId: string, filter?: string, sort?: string) {
+    //     // Dapatkan notes dengan noteblocks
+    //     let notes: (Note & { noteBlocks: NoteBlock[] })[] = [];
+    //     if (filter === 'favorite') {
+    //         notes = await this.prisma.note.findMany({
+    //             where: {
+    //                 noteUserFavorites: {
+    //                     some: {
+    //                         userId
+    //                     }
+    //                 }
+    //             },
+    //             include: {
+    //                 noteBlocks: true
+    //             },
+    //             orderBy: {
+    //                 updatedAt: 'desc'
+    //             }
+    //         });
+    //     } else if (filter === 'shared') {
+    //         notes = await this.prisma.note.findMany({
+    //             where: {
+    //                 noteEdits: {
+    //                     some: {
+    //                         userId
+    //                     }
+    //                 },
+    //                 status: { in: [NoteStatus.access, NoteStatus.public] }
+    //             },
+    //             include: {
+    //                 noteBlocks: true
+    //             },
+    //             orderBy: {
+    //                 updatedAt: 'desc'
+    //             }
+    //         });
+    //     } else {
+    //         notes = await this.prisma.note.findMany({
+    //             where: {
+    //                 userId
+    //             },
+    //             include: {
+    //                 noteBlocks: true
+    //             },
+    //             orderBy: {
+    //                 updatedAt: 'desc'
+    //             }
+    //         });
+    //     }
+
+    //     // Proses setiap note untuk mendapatkan table asli
+    //     const processedNotes = await Promise.all(notes.map(async (note) => {
+    //         // Filter noteBlocks yang bertipe table
+    //         const tableBlocks = note.noteBlocks.filter(block => block.type === BlockType.table);
+
+    //         // Dapatkan table notes untuk setiap block
+    //         const tableData = await Promise.all(tableBlocks.map(async (block) => {
+    //             if (!block.referenceId) return null;
+
+    //             // Dapatkan table note
+    //             const tableNote = await this.prisma.tableNote.findFirst({
+    //                 where: {
+    //                     id: block.referenceId,
+    //                     noteId: note.id  // Menggunakan noteId sebagai pengganti sourceNoteId
+    //                 },
+    //                 include: {
+    //                     table: true
+    //                 }
+    //             });
+
+    //             if (!tableNote || !tableNote.tableId) return null;
+
+    //             // Dapatkan table dengan data lengkap
+    //             const table = await this.prisma.table.findUnique({
+    //                 where: { id: tableNote.tableId },
+    //                 include: {
+    //                     // cols: true,
+    //                     // rows: {
+    //                     //     include: {
+    //                     //         rowData: true
+    //                     //     }
+    //                     // }
+    //                 }
+    //             });
+
+    //             if (!table) return null;
+
+    //             return {
+    //                 blockId: block.id,
+    //                 position: block.position,
+    //                 tableNote: tableNote,
+    //                 table: table
+    //             };
+    //         }));
+
+    //         // Filter out null values dan tambahkan ke note
+    //         const validTables = tableData.filter(item => item !== null);
+
+    //         return {
+    //             ...note,
+    //             tables: validTables
+    //         };
+    //     }));
+
+    //     return processedNotes;
+    // }
+
+    async getTables(userId: string, filter?: string, sort?: string, noteId?: string) {
+        // Dapatkan semua table yang dimiliki user
+        let tables: Table[] = [];
         if (filter === 'favorite') {
-            notes = await this.prisma.note.findMany({
+            tables = await this.prisma.table.findMany({
                 where: {
-                    noteUserFavorites: {
-                        some: {
-                            userId
+                    note: {
+                        noteUserFavorites: {
+                            some: {
+                                userId
+                            }
                         }
                     }
-                },
-                include: {
-                    noteBlocks: true
                 },
                 orderBy: {
                     updatedAt: 'desc'
                 }
             });
         } else if (filter === 'shared') {
-            notes = await this.prisma.note.findMany({
+            tables = await this.prisma.table.findMany({
                 where: {
-                    noteEdits: {
-                        some: {
-                            userId
-                        }
-                    },
-                    status: { in: [NoteStatus.access, NoteStatus.public] }
-                },
-                include: {
-                    noteBlocks: true
+                    note: {
+                        noteEdits: {
+                            some: {
+                                userId
+                            }
+                        },
+                        status: { in: [NoteStatus.access, NoteStatus.public] }
+                    }
                 },
                 orderBy: {
                     updatedAt: 'desc'
                 }
             });
         } else {
-            notes = await this.prisma.note.findMany({
+            if (noteId) {
+                // Dapatkan table yang dimiliki user tapi tidak ada di note tersebut
+                tables = await this.prisma.table.findMany({
+                    where: {
+                        note: {
+                            userId,
+                            // Exclude tables that are already in this note
+                            NOT: {
+                                tableNotes: {
+                                    some: {
+                                        noteId: noteId
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    }
+                });
+            } else {
+                tables = await this.prisma.table.findMany({
+                    where: {
+                        note: {
+                            userId
+                        }
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    }
+                });
+            }
+        }
+        // const tables = await this.prisma.table.findMany({
+        //     where: {
+        //         userId
+        //     },
+        //     orderBy: {
+        //         updatedAt: 'desc'
+        //     }
+        // });
+
+        // Proses setiap table untuk mendapatkan notes yang menggunakannya
+        const processedTables = await Promise.all(tables.map(async (table) => {
+            // Dapatkan table notes yang menggunakan table ini
+            const tableNotes = await this.prisma.tableNote.findMany({
                 where: {
-                    userId
+                    tableId: table.id
                 },
                 include: {
-                    noteBlocks: true
-                },
-                orderBy: {
-                    updatedAt: 'desc'
+                    note: {
+                        include: {
+                            noteBlocks: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                }
+                            }
+                        }
+                    },
                 }
             });
-        }
 
-        // Proses setiap note untuk mendapatkan table asli
-        const processedNotes = await Promise.all(notes.map(async (note) => {
-            // Filter noteBlocks yang bertipe table
-            const tableBlocks = note.noteBlocks.filter(block => block.type === BlockType.table);
-
-            // Dapatkan table notes untuk setiap block
-            const tableData = await Promise.all(tableBlocks.map(async (block) => {
-                if (!block.referenceId) return null;
-
-                // Dapatkan table note
-                const tableNote = await this.prisma.tableNote.findFirst({
+            // Filter notes yang valid (notes yang memiliki block table yang mengacu ke tableNote ini)
+            const validNotes = await Promise.all(tableNotes.map(async (tableNote) => {
+                // Cari block yang mengacu ke tableNote ini
+                const block = await this.prisma.noteBlock.findFirst({
                     where: {
-                        id: block.referenceId,
-                        noteId: note.id  // Menggunakan noteId sebagai pengganti sourceNoteId
-                    },
-                    include: {
-                        table: true
+                        noteId: tableNote.noteId,
+                        type: BlockType.table,
+                        referenceId: tableNote.id
                     }
                 });
 
-                if (!tableNote || !tableNote.tableId) return null;
-
-                // Dapatkan table dengan data lengkap
-                const table = await this.prisma.table.findUnique({
-                    where: { id: tableNote.tableId },
-                    include: {
-                        // cols: true,
-                        // rows: {
-                        //     include: {
-                        //         rowData: true
-                        //     }
-                        // }
-                    }
-                });
-
-                if (!table) return null;
+                if (!block) return null;
 
                 return {
+                    ...tableNote.note,
                     blockId: block.id,
-                    position: block.position,
-                    tableNote: tableNote,
-                    table: table
+                    position: block.position
                 };
             }));
 
-            // Filter out null values dan tambahkan ke note
-            const validTables = tableData.filter(item => item !== null);
+            // Filter out null values
+            const notes = validNotes.filter(note => note !== null);
 
             return {
-                ...note,
-                tables: validTables
+                ...table,
+                type: BlockType.table,
+                notes: notes
             };
         }));
 
-        return processedNotes;
+        return processedTables;
     }
-
 
     async updateRowData(id: string, data: UpdateRowDataDto, userId: string) {
         const rowData = await this.prisma.rowData.findUnique({
@@ -633,7 +844,7 @@ export class TableService {
         };
     }
 
-    
+
 
     async deleteTable(id: string, userId: string) {
         const tableNote = await this.prisma.tableNote.findUnique({
@@ -731,10 +942,10 @@ export class TableService {
                     referenceId: tableNote.id
                 }
             });
-            
+
             // Rapihkan posisi note block yang tersisa
             const updatedBlockPosition = await this.noteService.reorderNoteBlocks(note.id);
-            
+
             const deletedTableNote = await this.prisma.tableNote.delete({
                 where: {
                     id: tableNote.id
@@ -768,10 +979,10 @@ export class TableService {
                 referenceId: tableNote.id
             }
         });
-        
+
         // Rapihkan posisi note block yang tersisa
         const updatedBlockPosition = await this.noteService.reorderNoteBlocks(note.id);
-        
+
         const deletedTableNote = await this.prisma.tableNote.delete({
             where: {
                 id: tableNote.id
