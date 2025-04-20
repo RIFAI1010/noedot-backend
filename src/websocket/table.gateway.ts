@@ -59,14 +59,14 @@ export class TableGateway implements OnGatewayConnection {
     }
 
     handleConnection(client: any) {
-        try {
-            const token = client.handshake.auth.token;
-            if (!token) {
-                throw new UnauthorizedException('Token is required');
-            }
-        } catch (error) {
-            throw new UnauthorizedException('Invalid token');
-        }
+        // try {
+        //     const token = client.handshake.auth.token;
+        //     if (!token) {
+        //         throw new UnauthorizedException('Token is required');
+        //     }
+        // } catch (error) {
+        //     throw new UnauthorizedException('Invalid token');
+        // }
     }
 
     @SubscribeMessage('joinTable')
