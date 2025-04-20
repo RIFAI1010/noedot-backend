@@ -6,10 +6,11 @@ import { MailModule } from '../mail/mail.module';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { OAuthModule } from './oauth/oauth.module';
 import { WebsocketModule } from 'src/websocket/websocket.module';
+import { ConfigModule } from '@nestjs/config';
 // import { JwtModule } from '@nestjs/jwt';
 
 @Module({
-  imports: [PrismaModule, MailModule, OAuthModule, WebsocketModule
+  imports: [ConfigModule, PrismaModule, MailModule, OAuthModule, WebsocketModule
     // JwtModule.registerAsync({
     //   useFactory: () => ({
     //     secret: process.env.JWT_SECRET,
