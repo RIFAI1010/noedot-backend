@@ -155,12 +155,96 @@ export class NoteService {
         return updatedNote;
     }
 
-    async getNotes(userId: string, limit: number, page: number, sort?: string, my?: boolean) {
+    async getNotes(userId: string, filter?: string, sort?: string) {
         //sort: updatedat desc,
-        page = page || 1;
-        limit = limit || 10;
         let notes: (Note & { noteUserOpen: NoteUserOpen[] })[] = [];
-        if (my) {
+        // if (my) {
+        //     notes = await this.prisma.note.findMany({
+        //         where: {
+        //             userId,
+        //         },
+        //         include: {
+        //             noteUserOpen: {
+        //                 where: {
+        //                     userId,
+        //                 },
+        //                 take: 1
+        //             },
+        //         },
+        //         orderBy: {
+        //             updatedAt: 'desc'
+        //         },
+        //     });
+        // } else {
+        //     notes = await this.prisma.note.findMany({
+        //         where: {
+        //             OR: [
+        //                 { userId },
+        //                 { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
+        //             ]
+        //         },
+        //         include: {
+        //             noteUserOpen: {
+        //                 where: { userId },
+        //                 take: 1
+        //             },
+        //         },
+        //         orderBy: {
+        //             updatedAt: 'desc'
+        //         },
+        //     });
+        // }
+        if (filter === 'favorite') {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    noteUserFavorites: {
+                        some: { userId }
+                    }
+                },
+                include: {
+                    noteUserOpen: {
+                        where: { userId },
+                        take: 1
+                    },
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                },
+            });
+        } else if (filter === 'shared') {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    noteEdits: { some: { userId } },
+                    status: { in: [NoteStatus.access, NoteStatus.public] }
+                },
+                include: {
+                    noteUserOpen: {
+                        where: { userId },
+                        take: 1
+                    },
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                },
+            });
+        } else if (filter === 'all') {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    OR: [
+                        { userId },
+                        { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } },
+                        { noteUserFavorites: { some: { userId } } }
+                    ]
+                },
+                include: {
+                    noteUserOpen: {
+                        where: { userId },
+                        take: 1
+                    },
+                },
+            });
+        } 
+        else {
             notes = await this.prisma.note.findMany({
                 where: {
                     userId,
@@ -176,28 +260,6 @@ export class NoteService {
                 orderBy: {
                     updatedAt: 'desc'
                 },
-                skip: (page - 1) * limit,
-                take: limit,
-            });
-        } else {
-            notes = await this.prisma.note.findMany({
-                where: {
-                    OR: [
-                        { userId },
-                        { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
-                    ]
-                },
-                include: {
-                    noteUserOpen: {
-                        where: { userId },
-                        take: 1
-                    },
-                },
-                orderBy: {
-                    updatedAt: 'desc'
-                },
-                skip: (page - 1) * limit,
-                take: limit,
             });
         }
 
