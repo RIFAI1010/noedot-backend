@@ -16,7 +16,12 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
   app.enableCors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3044', 'http://192.168.18.121:3000'], 
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000', 
+      'http://localhost:3044', 
+      'http://192.168.18.121:3000',
+      'https://noedot-backend-production.up.railway.app'
+    ], 
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],

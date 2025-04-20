@@ -5,7 +5,11 @@ import {
     OnGatewayConnection,
 } from '@nestjs/websockets';
 
-@WebSocketGateway({ cors: true })
+@WebSocketGateway({ cors: {
+    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3044', 'http://192.168.18.121:3000'],
+    methods: ['GET', 'POST'],
+    credentials: true,
+}, })
 export class VerificationGateway implements OnGatewayConnection {
     @WebSocketServer() server: Server;
 
