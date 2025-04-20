@@ -4,7 +4,7 @@ import { MailService } from 'src/mail/mail.service';
 import * as bcrypt from 'bcrypt';
 import { generateAccessToken, generateLoginToken, generateRefreshToken, generateResetToken, generateVerifySocketToken, generateVeriifyToken, UserRefreshType, UserVerifyType } from '../common/utils/jwt.util';
 import * as jwt from 'jsonwebtoken';
-import { REFRESH_SECRET, RESET_SECRET, VERIFY_SECRET, VERIFY_SOCKET_SECRET } from 'src/config';
+import { REFRESH_SECRET, RESET_SECRET, VERIFY_LOGIN_SECRET, VERIFY_SECRET, VERIFY_SOCKET_SECRET } from 'src/config';
 import { VerificationGateway } from 'src/websocket/verification.gateway';
 import { ForgotPasswordDto, LoginDto, RegisterDto, ResendVerificationDto, ResetPasswordDto, VerifyEmailDto } from './dto/auth.dto';
 
@@ -230,7 +230,7 @@ export class AuthService {
 
 
     async loginToken(token: string, deviceInfo: string, ipAddress: string) {
-        const decode = jwt.verify(token, VERIFY_SECRET) as UserVerifyType;
+        const decode = jwt.verify(token, VERIFY_LOGIN_SECRET) as UserVerifyType;
         const user = await this.prisma.user.findUnique({
             where: { id: decode.id },
         })
