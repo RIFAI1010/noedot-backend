@@ -14,7 +14,7 @@ import { UserAccessType } from 'src/common/utils/jwt.util';
 
 @WebSocketGateway({
     cors: {
-        origin: '*',
+        origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3044', 'http://192.168.18.121:3000'],
         methods: ['GET', 'POST'],
         credentials: true,
     },
