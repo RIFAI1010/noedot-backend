@@ -150,6 +150,21 @@ export class NoteService {
                     });
                 }
             }
+            if (block.type === BlockType.table && block.referenceId) {
+                const tableNote = await this.prisma.tableNote.findFirst({
+                    where: { id: block.referenceId },
+                    include: {
+                        table: true
+                    }
+                });
+                if (tableNote && tableNote.table) {
+                    await this.tableGateway.sendTableUpdated(tableNote.table.id, userId, {
+                        id: tableNote.table.id,
+                        updatedAt: new Date(),
+                        socketAction: 'updateNote'
+                    });
+                }
+            }
         }
 
         return updatedNote;
