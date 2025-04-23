@@ -37,9 +37,9 @@ export class NoteController {
     @Get()
     getNotes(
         @Auth() user: UserAccessType,
-        @Query() query: { limit?: number, page?: number, sort?: string, my?: string }
+        @Query() query: { sort?: string, filter?: string }
     ) {
-        return this.noteService.getNotes(user.id, parseInt(query.limit as any), parseInt(query.page as any), (query.sort ?? undefined), (query.my === 'true'));
+        return this.noteService.getNotes(user.id, (query.filter ?? undefined), (query.sort ?? undefined));
     }
 
     @Get(':id')
