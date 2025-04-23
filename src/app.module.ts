@@ -20,10 +20,12 @@ import { DocumentModule } from './document/document.module';
 import { DocumentController } from './document/document.controller';
 import { TableController } from './table/table.controller';
 import { NoteController } from './note/note.controller';
+import { DebugModule } from './debug/debug.module';
+import { DebugController } from './debug/debug.controller';
 
 @Module({
-  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule, DocumentModule],
-  controllers: [AppController, AuthController, OAuthController, UserController, DocumentController, TableController, NoteController],
+  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule, DocumentModule, DebugModule],
+  controllers: [AppController, AuthController, OAuthController, UserController, DocumentController, TableController, NoteController, DebugController],
   providers: [AppService, UserService, {
     provide: APP_INTERCEPTOR,
     useClass: LoggingInterceptor,
