@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { NoteService } from "./note.service";
-import { CreateNoteDto, UpdateBlockPositionDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { CreateNoteDto, UpdateBlockPositionDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
 import { UserAccessType } from "src/common/utils/jwt.util";
 import { Auth } from "src/common/decorators/user.decorator";
+import { NoteTag } from "@prisma/client";
 
 
 @Controller('note')
@@ -25,6 +26,14 @@ export class NoteController {
     ) {
         return this.noteService.updateNote(id, data, user.id);
     }
+    @Put(':id/tag')
+    updateNoteTag(
+        @Param('id') id: string,
+        @Body() data: UpdateNoteTagDto,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.updateNoteTag(id, data, user.id);
+    }
     @Put(':id/title')
     updateNoteTitle(
         @Param('id') id: string,
@@ -37,9 +46,9 @@ export class NoteController {
     @Get()
     getNotes(
         @Auth() user: UserAccessType,
-        @Query() query: { sort?: string, filter?: string }
+        @Query() query: { sort?: string, filter?: string, tag: NoteTag }
     ) {
-        return this.noteService.getNotes(user.id, (query.filter ?? undefined), (query.sort ?? undefined));
+        return this.noteService.getNotes(user.id, (query.filter ?? undefined), (query.sort ?? undefined), (query.tag ?? undefined));
     }
 
     @Get(':id')

@@ -134,6 +134,23 @@ export class TableService {
             });
         }
 
+        const noteFromTable = await this.prisma.note.findUnique({
+            where: {
+                id: table.sourceNoteId
+            }
+        })
+
+        if (!noteFromTable) {
+            throw new NotFoundException('Note from table not found');
+        }
+
+        if (noteFromTable.status !== NoteStatus.public) {
+            throw new BadRequestException({
+                message: 'Note from table is not public',
+                serverCode: 'NOTE_FROM_TABLE_NOT_PUBLIC'
+            });
+        }
+
         const tableNote = await this.prisma.tableNote.create({
             data: {
                 tableId: table.id,

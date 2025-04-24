@@ -56,6 +56,7 @@ model Note {
   editable  Editable   @default(me)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+  tags NoteTag @default(todo)
 
   noteEdits  NoteEditAccess[]
   noteUserFavorites NoteUserFavorite[]
@@ -68,6 +69,12 @@ model Note {
 
   PostGroup    PostGroup[]
   noteUserOpen NoteUserOpen[]
+}
+
+enum NoteTag {
+  todo
+  progress
+  complete
 }
 
 model NoteBlock {

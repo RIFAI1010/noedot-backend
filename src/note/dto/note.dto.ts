@@ -1,4 +1,4 @@
-import { Editable, NoteStatus } from "@prisma/client";
+import { Editable, NoteStatus, NoteTag } from "@prisma/client";
 import { IsArray, IsEnum, isNotEmpty, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class CreateNoteDto {
@@ -38,6 +38,12 @@ export class UpdateNoteDto {
     @IsArray()
     @IsString({ each: true })
     userAccess?: string[];
+}
+
+export class UpdateNoteTagDto {
+    @IsNotEmpty()
+    @IsEnum(NoteTag)
+    tag: NoteTag;
 }
 
 export class UpdateNoteTitleDto {

@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
-import { CreateNoteDto, UpdateNoteDto, UpdateNoteTitleDto } from "./dto/note.dto";
-import { BlockType, Editable, Note, NoteBlock, NoteStatus, NoteUserOpen } from "@prisma/client";
+import { CreateNoteDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { BlockType, Editable, Note, NoteBlock, NoteEditAccess, NoteStatus, NoteTag, NoteUserOpen } from "@prisma/client";
 import { User } from "@prisma/client";
 import { NoteGateway } from "src/websocket/note.gateway";
 import { UserGateway } from "src/websocket/user.gateway";
@@ -170,112 +170,153 @@ export class NoteService {
         return updatedNote;
     }
 
-    async getNotes(userId: string, filter?: string, sort?: string) {
+    async getNotes(userId: string, filter?: string, sort?: string, tag?: NoteTag) {
         //sort: updatedat desc,
         let notes: (Note & { noteUserOpen: NoteUserOpen[] })[] = [];
-        // if (my) {
-        //     notes = await this.prisma.note.findMany({
-        //         where: {
-        //             userId,
-        //         },
-        //         include: {
-        //             noteUserOpen: {
-        //                 where: {
-        //                     userId,
-        //                 },
-        //                 take: 1
-        //             },
-        //         },
-        //         orderBy: {
-        //             updatedAt: 'desc'
-        //         },
-        //     });
-        // } else {
-        //     notes = await this.prisma.note.findMany({
-        //         where: {
-        //             OR: [
-        //                 { userId },
-        //                 { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
-        //             ]
-        //         },
-        //         include: {
-        //             noteUserOpen: {
-        //                 where: { userId },
-        //                 take: 1
-        //             },
-        //         },
-        //         orderBy: {
-        //             updatedAt: 'desc'
-        //         },
-        //     });
-        // }
         if (filter === 'favorite') {
-            notes = await this.prisma.note.findMany({
-                where: {
-                    noteUserFavorites: {
-                        some: { userId }
-                    }
-                },
-                include: {
-                    noteUserOpen: {
-                        where: { userId },
-                        take: 1
+            if (!tag) {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        noteUserFavorites: {
+                            some: { userId }
+                        }
                     },
-                },
-                orderBy: {
-                    updatedAt: 'desc'
-                },
-            });
-        } else if (filter === 'shared') {
-            notes = await this.prisma.note.findMany({
-                where: {
-                    noteEdits: { some: { userId } },
-                    status: { in: [NoteStatus.access, NoteStatus.public] }
-                },
-                include: {
-                    noteUserOpen: {
-                        where: { userId },
-                        take: 1
-                    },
-                },
-                orderBy: {
-                    updatedAt: 'desc'
-                },
-            });
-        } else if (filter === 'all') {
-            notes = await this.prisma.note.findMany({
-                where: {
-                    OR: [
-                        { userId },
-                        { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } },
-                        { noteUserFavorites: { some: { userId } } }
-                    ]
-                },
-                include: {
-                    noteUserOpen: {
-                        where: { userId },
-                        take: 1
-                    },
-                },
-            });
-        } 
-        else {
-            notes = await this.prisma.note.findMany({
-                where: {
-                    userId,
-                },
-                include: {
-                    noteUserOpen: {
-                        where: {
-                            userId,
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
                         },
-                        take: 1
                     },
-                },
-                orderBy: {
-                    updatedAt: 'desc'
-                },
-            });
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            } else {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        noteUserFavorites: {
+                            some: { userId }
+                        },
+                        tags: tag
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
+                        },
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            }
+        } else if (filter === 'shared') {
+            if (!tag) {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        noteEdits: { some: { userId } },
+                        status: { in: [NoteStatus.access, NoteStatus.public] }
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
+                        },
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            } else {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        noteEdits: { some: { userId } },
+                        status: { in: [NoteStatus.access, NoteStatus.public] },
+                        tags: tag
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
+                        },
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            }
+        } else if (filter === 'all') {
+            if (!tag) {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        OR: [
+                            { userId },
+                            { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } },
+                            { noteUserFavorites: { some: { userId } } }
+                        ]
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
+                        },
+                    },
+                });
+            } else {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        OR: [
+                            { userId, tags: tag },
+                            { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] }, tags: tag },
+                            { noteUserFavorites: { some: { userId } }, tags: tag }
+                        ]
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: { userId },
+                            take: 1
+                        },
+                    },
+                });
+            }
+        }
+        else {
+            if (!tag) {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        userId,
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: {
+                                userId,
+                            },
+                            take: 1
+                        },
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            } else {
+                notes = await this.prisma.note.findMany({
+                    where: {
+                        userId,
+                        tags: tag
+                    },
+                    include: {
+                        noteUserOpen: {
+                            where: {
+                                userId,
+                            },
+                            take: 1
+                        },
+                    },
+                    orderBy: {
+                        updatedAt: 'desc'
+                    },
+                });
+            }
         }
 
         const notesWithOpenAt = notes.map(note => ({
@@ -418,6 +459,53 @@ export class NoteService {
             owner
         };
     }
+    async updateNoteTag(id: string, data: UpdateNoteTagDto, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: { id },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+        const updatedNote = await this.prisma.note.update({
+            where: { id },
+            data: {
+                tags: data.tag
+            }
+        });
+
+        // Kirim notifikasi websocket
+        await this.noteGateway.sendNoteUpdated(id, userId, {
+            id,
+            tags: data.tag,
+            updatedAt: new Date(),
+            socketAction: 'updateNoteTag'
+        });
+
+        return { message: 'Note tag updated successfully' };
+        return {
+            ...updatedNote,
+            canEdit,
+            owner
+        };
+    }
 
     async getNoteBlocks(id: string, userId: string) {
         const note = await this.prisma.note.findUnique({
@@ -506,6 +594,24 @@ export class NoteService {
         }
 
         return remainingBlocks.map(block => ({ id: block.id, position: block.position }));
+    }
+
+    async noteValidation(note: { noteEdits: { userId: string }[] } & Note, userId: string) {
+        let canEdit = false;
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+        return {
+            canEdit,
+            owner
+        }
     }
 
     async updateBlockPosition(id: string, blockId: string, direction: Direction, userId: string) {
