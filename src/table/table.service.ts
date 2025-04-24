@@ -133,31 +133,26 @@ export class TableService {
                 serverCode: 'COMPONENTS_ALREADY_RELATED_TO_NOTE'
             });
         }
-
         const noteFromTable = await this.prisma.note.findUnique({
             where: {
                 id: table.sourceNoteId
             }
         })
-
         if (!noteFromTable) {
             throw new NotFoundException('Note from table not found');
         }
-
         if (noteFromTable.status !== NoteStatus.public) {
             throw new BadRequestException({
-                message: 'Note from table is not public',
+                message: 'Note from table is must be public',
                 serverCode: 'NOTE_FROM_TABLE_NOT_PUBLIC'
             });
         }
-
         const tableNote = await this.prisma.tableNote.create({
             data: {
                 tableId: table.id,
                 noteId: note.id
             }
         })
-
         const noteBlockOrder = await this.prisma.noteBlock.findFirst({
             where: {
                 noteId: note.id,
@@ -174,7 +169,6 @@ export class TableService {
                 position: noteBlockOrder ? noteBlockOrder.position + 1 : 1
             }
         })
-
         await this.noteGateway.sendNoteUpdated(note.id, userId, {
             id: note.id,
             updatedAt: new Date(),

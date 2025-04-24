@@ -61,23 +61,6 @@ export class DocumentService {
             }
         })
 
-        const noteFromDocument = await this.prisma.note.findUnique({
-            where: {
-                id: document.sourceNoteId
-            }
-        })
-
-        if (!noteFromDocument) {
-            throw new NotFoundException('Note from document not found');
-        }
-
-        if (noteFromDocument.status !== NoteStatus.public) {
-            throw new BadRequestException({
-                message: 'Note from document is not public',
-                serverCode: 'NOTE_FROM_DOCUMENT_NOT_PUBLIC'
-            });
-        }
-
         const noteBlockOrder = await this.prisma.noteBlock.findFirst({
             where: {
                 noteId: note.id,
@@ -150,14 +133,26 @@ export class DocumentService {
                 serverCode: 'COMPONENTS_ALREADY_RELATED_TO_NOTE'
             });
         }
-
+        const noteFromDocument = await this.prisma.note.findUnique({
+            where: {
+                id: document.sourceNoteId
+            }
+        })
+        if (!noteFromDocument) {
+            throw new NotFoundException('Note from document not found');
+        }
+        if (noteFromDocument.status !== NoteStatus.public) {
+            throw new BadRequestException({
+                message: 'Note document table is must be public',
+                serverCode: 'NOTE_FROM_DOCUMENT_NOT_PUBLIC'
+            });
+        }
         const documentNote = await this.prisma.documentNote.create({
             data: {
                 documentId: document.id,
                 noteId: note.id
             }
         })
-
         const noteBlockOrder = await this.prisma.noteBlock.findFirst({
             where: {
                 noteId: note.id,
