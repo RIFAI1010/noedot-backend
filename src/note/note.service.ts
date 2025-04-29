@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
-import { CreateNoteDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { CreateNoteDto, UpdateNoteDateDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
 import { BlockType, Editable, Note, NoteBlock, NoteEditAccess, NoteStatus, NoteTag, NoteUserOpen } from "@prisma/client";
 import { User } from "@prisma/client";
 import { NoteGateway } from "src/websocket/note.gateway";
@@ -170,7 +170,7 @@ export class NoteService {
         return updatedNote;
     }
 
-    async getNotes(userId: string, filter?: string, sort?: string, tag?: NoteTag) {
+    async getNotes(userId: string, filter?: string, sort?: string, tag?: string) {
         //sort: updatedat desc,
         let notes: (Note & { noteUserOpen: NoteUserOpen[] })[] = [];
         if (filter === 'favorite') {
@@ -196,8 +196,7 @@ export class NoteService {
                     where: {
                         noteUserFavorites: {
                             some: { userId }
-                        },
-                        tags: tag
+                        }
                     },
                     include: {
                         noteUserOpen: {
@@ -231,8 +230,7 @@ export class NoteService {
                 notes = await this.prisma.note.findMany({
                     where: {
                         noteEdits: { some: { userId } },
-                        status: { in: [NoteStatus.access, NoteStatus.public] },
-                        tags: tag
+                        status: { in: [NoteStatus.access, NoteStatus.public] }
                     },
                     include: {
                         noteUserOpen: {
@@ -266,9 +264,9 @@ export class NoteService {
                 notes = await this.prisma.note.findMany({
                     where: {
                         OR: [
-                            { userId, tags: tag },
-                            { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] }, tags: tag },
-                            { noteUserFavorites: { some: { userId } }, tags: tag }
+                            { userId },
+                            { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } },
+                            { noteUserFavorites: { some: { userId } } }
                         ]
                     },
                     include: {
@@ -302,7 +300,6 @@ export class NoteService {
                 notes = await this.prisma.note.findMany({
                     where: {
                         userId,
-                        tags: tag
                     },
                     include: {
                         noteUserOpen: {
@@ -324,14 +321,41 @@ export class NoteService {
             openAt: note.noteUserOpen[0]?.openAt || null
         }));
 
+        // Format dates to YYYY-MM-DD and add dateStatus
+        const formatDate = (date: Date | null) => {
+            if (!date) return null;
+            return date.toISOString().split('T')[0];
+        };
+
+        const now = new Date();
+        const notesWithStatus = notesWithOpenAt.map(note => {
+            let dateStatus = 'todo';
+            
+            if (note.begin && note.due && now >= note.begin && now <= note.due) {
+                dateStatus = 'progress';
+            } else if (note.due && now > note.due) {
+                dateStatus = note.confirmDue ? 'complete' : 'confirm to complete';
+            }
+
+            return {
+                ...note,
+                dateStatus,
+                due: formatDate(note.due),
+                begin: formatDate(note.begin)
+            };
+        });
+
+        // Filter by dateStatus if tag is provided
+        const filteredNotes = tag ? notesWithStatus.filter(note => note.dateStatus === tag) : notesWithStatus;
+
         if (sort === 'openAt') {
-            notesWithOpenAt.sort((a, b) => {
+            filteredNotes.sort((a, b) => {
                 if (!a.openAt) return 1;
                 if (!b.openAt) return -1;
                 return b.openAt.getTime() - a.openAt.getTime();
             });
         }
-        return notesWithOpenAt;
+        return filteredNotes;
     }
 
     async getNote(userId: string, id: string) {
@@ -402,13 +426,44 @@ export class NoteService {
             where: { noteId: id, userId }
         });
 
+        const noteDue = await this.prisma.note.findFirst({
+            where: { id },
+            select: {
+                due: true,
+                begin: true,
+                confirmDue: true
+            }
+        });
+
+        const now = new Date();
+        let status = 'todo';
+
+        if (noteDue) {
+            if (noteDue.begin && noteDue.due && now >= noteDue.begin && now <= noteDue.due) {
+                status = 'progress';
+            } else if (noteDue.due && now > noteDue.due) {
+                status = noteDue.confirmDue ? 'complete' : 'confirm to complete';
+            } else {
+                status = 'todo';
+            }
+        }
+
+        // Format dates to YYYY-MM-DD
+        const formatDate = (date: Date | null) => {
+            if (!date) return null;
+            return date.toISOString().split('T')[0];
+        };
+
         return {
+            dateStatus: status,
             ...note,
             canEdit,
             owner,
             noteEdits: users,
             noteBlocks,
-            favorite: noteFavorite ? true : false
+            favorite: noteFavorite ? true : false,
+            due: formatDate(note.due),
+            begin: formatDate(note.begin)
         }
     }
 
@@ -506,6 +561,123 @@ export class NoteService {
             owner
         };
     }
+
+    async updateNoteDate(type: 'due' | 'begin', id: string, data: UpdateNoteDateDto, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: { id },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+
+        // Convert date string to DateTime object
+        const date = new Date(data.date);
+        if (isNaN(date.getTime())) {
+            throw new BadRequestException('Invalid date format');
+        }
+
+        if (type === 'due') {
+            // if (date < new Date()) {
+            //     throw new BadRequestException('Due date cannot be in the past');
+            // }
+            if (note.begin && date < note.begin) {
+                throw new BadRequestException('Due date cannot be before begin date');
+            }
+            const updatedNote = await this.prisma.note.update({
+                where: { id },
+                data: {
+                    due: date,
+                    confirmDue: false
+                }
+            });
+
+            // Kirim notifikasi websocket
+            await this.noteGateway.sendNoteUpdated(id, userId, {
+                id,
+                due: date,
+                updatedAt: new Date(),
+                socketAction: 'updateNoteDue'
+            });
+        } else if (type === 'begin') {
+            // if (date < new Date()) {
+            //     throw new BadRequestException('Begin date cannot be in the past');
+            // }
+            if (note.due && date > note.due) {
+                throw new BadRequestException('Begin date cannot be after due date');
+            }
+            const updatedNote = await this.prisma.note.update({
+                where: { id },
+                data: {
+                    begin: date
+                }
+            });
+
+            // Kirim notifikasi websocket
+            await this.noteGateway.sendNoteUpdated(id, userId, {
+                id,
+                begin: date,
+                updatedAt: new Date(),
+                socketAction: 'updateNoteBegin'
+            });
+        }
+
+        return { message: 'Note date updated successfully' };
+    }
+
+
+    async confirmDue(id: string, userId: string) {
+        const note = await this.prisma.note.findUnique({
+            where: { id },
+            include: {
+                noteEdits: {
+                    select: {
+                        userId: true,
+                    }
+                }
+            }
+        });
+        let canEdit = false;
+        if (!note) {
+            throw new NotFoundException('Note not found');
+        }
+        const owner = note.userId === userId;
+        if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
+            throw new ForbiddenException('You are not allowed to access this note');
+        }
+        if (note.editable === Editable.everyone || (note.editable === Editable.access && note.noteEdits.some(edit => edit.userId === userId)) || note.userId === userId) {
+            canEdit = true;
+        }
+        if (!canEdit) {
+            throw new ForbiddenException('You are not allowed to edit this note');
+        }
+        const updatedNote = await this.prisma.note.update({
+            where: { id },
+            data: {
+                confirmDue: true
+            }
+        });
+        return { message: 'Note due confirmed successfully' };
+    }
+
+
 
     async getNoteBlocks(id: string, userId: string) {
         const note = await this.prisma.note.findUnique({
@@ -962,6 +1134,105 @@ export class NoteService {
             return {
                 ...note,
                 documents: validDocuments
+            };
+        }));
+
+        return processedNotes;
+    }
+
+    async getNotesWithBoards(userId: string, filter?: string, sort?: string) {
+        // Dapatkan notes dengan noteblocks
+        let notes: (Note & { noteBlocks: NoteBlock[] })[] = [];
+        if (filter === 'favorite') {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    noteUserFavorites: {
+                        some: {
+                            userId
+                        }
+                    }
+                },
+                include: {
+                    noteBlocks: true
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+        } else if (filter === 'shared') {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    noteEdits: {
+                        some: {
+                            userId
+                        }
+                    },
+                    status: { in: [NoteStatus.access, NoteStatus.public] }
+                },
+                include: {
+                    noteBlocks: true
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+        } else {
+            notes = await this.prisma.note.findMany({
+                where: {
+                    userId
+                },
+                include: {
+                    noteBlocks: true
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+        }
+
+        // Proses setiap note untuk mendapatkan board
+        const processedNotes = await Promise.all(notes.map(async (note) => {
+            // Filter noteBlocks yang bertipe board
+            const boardBlocks = note.noteBlocks.filter(block => block.type === BlockType.board);
+
+            // Dapatkan board notes untuk setiap block
+            const boardData = await Promise.all(boardBlocks.map(async (block) => {
+                if (!block.referenceId) return null;
+
+                // Dapatkan board note
+                const boardNote = await this.prisma.boardNote.findFirst({
+                    where: {
+                        id: block.referenceId,
+                        noteId: note.id
+                    },
+                    include: {
+                        board: true
+                    }
+                });
+
+                if (!boardNote || !boardNote.boardId) return null;
+
+                // Dapatkan document dengan data lengkap
+                const board = await this.prisma.board.findUnique({
+                    where: { id: boardNote.boardId }
+                });
+
+                if (!board) return null;
+
+                return {
+                    blockId: block.id,
+                    position: block.position,
+                    documentNote: boardNote,
+                    document: document
+                };
+            }));
+
+            // Filter out null values dan tambahkan ke note
+            const validBoards = boardData.filter(item => item !== null);
+
+            return {
+                ...note,
+                boards: validBoards
             };
         }));
 

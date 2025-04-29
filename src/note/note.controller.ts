@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { NoteService } from "./note.service";
-import { CreateNoteDto, UpdateBlockPositionDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
+import { CreateNoteDto, UpdateBlockPositionDto, UpdateNoteDateDto, UpdateNoteDto, UpdateNoteTagDto, UpdateNoteTitleDto } from "./dto/note.dto";
 import { UserAccessType } from "src/common/utils/jwt.util";
 import { Auth } from "src/common/decorators/user.decorator";
 import { NoteTag } from "@prisma/client";
@@ -34,6 +34,29 @@ export class NoteController {
     ) {
         return this.noteService.updateNoteTag(id, data, user.id);
     }
+    @Put(':id/due')
+    updateNoteDue(
+        @Param('id') id: string,
+        @Body() data: UpdateNoteDateDto,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.updateNoteDate('due', id, data, user.id);
+    }
+    @Put(':id/begin')
+    updateNoteBegin(
+        @Param('id') id: string,
+        @Body() data: UpdateNoteDateDto,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.updateNoteDate('begin', id, data, user.id);
+    }
+    @Post(':id/confirm-due')
+    confirmDue(
+        @Param('id') id: string,
+        @Auth() user: UserAccessType
+    ) {
+        return this.noteService.confirmDue(id, user.id);
+    }
     @Put(':id/title')
     updateNoteTitle(
         @Param('id') id: string,
@@ -46,7 +69,7 @@ export class NoteController {
     @Get()
     getNotes(
         @Auth() user: UserAccessType,
-        @Query() query: { sort?: string, filter?: string, tag: NoteTag }
+        @Query() query: { sort?: string, filter?: string, tag?: string }
     ) {
         return this.noteService.getNotes(user.id, (query.filter ?? undefined), (query.sort ?? undefined), (query.tag ?? undefined));
     }

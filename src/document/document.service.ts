@@ -144,7 +144,7 @@ export class DocumentService {
         if (noteFromDocument.status !== NoteStatus.public) {
             throw new BadRequestException({
                 message: 'Note document table is must be public',
-                serverCode: 'NOTE_FROM_DOCUMENT_NOT_PUBLIC'
+                serverCode: 'NOTE_NOT_PUBLIC'
             });
         }
         const documentNote = await this.prisma.documentNote.create({

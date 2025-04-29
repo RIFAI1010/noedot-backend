@@ -22,10 +22,12 @@ import { TableController } from './table/table.controller';
 import { NoteController } from './note/note.controller';
 import { DebugModule } from './debug/debug.module';
 import { DebugController } from './debug/debug.controller';
+import { BoardModule } from './board/board.module';
+import { BoardController } from './board/board.controller';
 
 @Module({
-  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule, DocumentModule, DebugModule],
-  controllers: [AppController, AuthController, OAuthController, UserController, DocumentController, TableController, NoteController, DebugController],
+  imports: [ConfigModule.forRoot(), PrismaModule, UserModule, AuthModule, OAuthModule, NoteModule, TableModule, DocumentModule, BoardModule, DebugModule],
+  controllers: [AppController, AuthController, OAuthController, UserController, BoardController, DocumentController, TableController, NoteController, DebugController],
   providers: [AppService, UserService, {
     provide: APP_INTERCEPTOR,
     useClass: LoggingInterceptor,

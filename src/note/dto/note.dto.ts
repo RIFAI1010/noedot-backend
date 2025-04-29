@@ -1,5 +1,5 @@
 import { Editable, NoteStatus, NoteTag } from "@prisma/client";
-import { IsArray, IsEnum, isNotEmpty, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsArray, IsDateString, IsEnum, isNotEmpty, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class CreateNoteDto {
     @IsNotEmpty()
@@ -61,4 +61,10 @@ export class UpdateBlockPositionDto {
     @IsNotEmpty()
     @IsEnum(Direction)
     direction: Direction;
+}
+
+export class UpdateNoteDateDto {
+    @IsNotEmpty()
+    @IsDateString()
+    date: Date;
 }

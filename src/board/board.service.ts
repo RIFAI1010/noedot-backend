@@ -1,21 +1,22 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
-import { CreateRowDataDto, CreateTableDto, UpdateColDto, UpdateRowDataDto, UpdateTableNameDto } from "./dto/table.dto";
-import { BlockType, Col, Editable, Note, NoteBlock, NoteStatus, Row, RowData, Table } from "@prisma/client";
-import { TableGateway } from "src/websocket/table.gateway";
+import { CreateBoardDto, CreateCardDto, UpdateBoardNameDto, UpdateCardDto, UpdateCardPositionDto, UpdateColumnDto } from "./dto/board.dto";
+import { BlockType, Board, BoardCard } from "@prisma/client";
+import { Editable } from "@prisma/client";
+import { NoteStatus } from "@prisma/client";
 import { NoteGateway } from "src/websocket/note.gateway";
+import { BoardGateway } from "src/websocket/board.gateway";
 import { NoteService } from "src/note/note.service";
-
 @Injectable()
-export class TableService {
+export class BoardService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly tableGateway: TableGateway,
         private readonly noteGateway: NoteGateway,
+        private readonly boardGateway: BoardGateway,
         private readonly noteService: NoteService
     ) { }
 
-    async createTable(data: CreateTableDto, userId: string) {
+    async createBoard(data: CreateBoardDto, userId: string) {
         const note = await this.prisma.note.findUnique({
             where: {
                 id: data.noteId,
@@ -48,15 +49,15 @@ export class TableService {
             throw new ForbiddenException('You are not allowed to edit this note');
         }
 
-        const table = await this.prisma.table.create({
+        const board = await this.prisma.board.create({
             data: {
                 sourceNoteId: note.id
             },
         });
 
-        const tableNote = await this.prisma.tableNote.create({
+        const boardNote = await this.prisma.boardNote.create({
             data: {
-                tableId: table.id,
+                boardId: board.id,
                 noteId: note.id
             }
         })
@@ -72,8 +73,8 @@ export class TableService {
         const noteBlock = await this.prisma.noteBlock.create({
             data: {
                 noteId: note.id,
-                type: BlockType.table,
-                referenceId: tableNote.id,
+                type: BlockType.board,
+                referenceId: boardNote.id,
                 position: noteBlockOrder ? noteBlockOrder.position + 1 : 1
             }
         })
@@ -84,10 +85,10 @@ export class TableService {
             socketAction: 'addBlock',
             newBlock: noteBlock
         });
-        return { table, noteBlock };
+        return { board, noteBlock };
     }
 
-    async addRelationTable(id: string, noteId: string, userId: string) {
+    async addRelationBoard(id: string, noteId: string, userId: string) {
         const note = await this.prisma.note.findUnique({
             where: {
                 id: noteId,
@@ -119,37 +120,37 @@ export class TableService {
         if (!canEdit) {
             throw new ForbiddenException('You are not allowed to edit this note');
         }
-        const table = await this.prisma.table.findUnique({
+        const board = await this.prisma.board.findUnique({
             where: {
                 id: id,
             },
         });
-        if (!table) {
+        if (!board) {
             throw new NotFoundException('Table not found');
         }
-        if (table.sourceNoteId === note.id) {
+        if (board.sourceNoteId === note.id) {
             throw new BadRequestException({
-                message: 'Table is already related to this note',
+                message: 'board is already related to this note',
                 serverCode: 'COMPONENTS_ALREADY_RELATED_TO_NOTE'
             });
         }
-        const noteFromTable = await this.prisma.note.findUnique({
+        const noteFromBoard = await this.prisma.note.findUnique({
             where: {
-                id: table.sourceNoteId
+                id: board.sourceNoteId
             }
         })
-        if (!noteFromTable) {
-            throw new NotFoundException('Note from table not found');
+        if (!noteFromBoard) {
+            throw new NotFoundException('Note from board not found');
         }
-        if (noteFromTable.status !== NoteStatus.public) {
+        if (noteFromBoard.status !== NoteStatus.public) {
             throw new BadRequestException({
-                message: 'Note from table is must be public',
+                message: 'Note from board is must be public',
                 serverCode: 'NOTE_NOT_PUBLIC'
             });
         }
-        const tableNote = await this.prisma.tableNote.create({
+        const boardNote = await this.prisma.boardNote.create({
             data: {
-                tableId: table.id,
+                boardId: board.id,
                 noteId: note.id
             }
         })
@@ -164,8 +165,8 @@ export class TableService {
         const noteBlock = await this.prisma.noteBlock.create({
             data: {
                 noteId: note.id,
-                type: BlockType.table,
-                referenceId: tableNote.id,
+                type: BlockType.board,
+                referenceId: boardNote.id,
                 position: noteBlockOrder ? noteBlockOrder.position + 1 : 1
             }
         })
@@ -175,29 +176,29 @@ export class TableService {
             socketAction: 'addBlock',
             newBlock: noteBlock
         });
-        return { table, noteBlock };
+        return { board, noteBlock };
     }
 
-    async getTable(id: string, userId: string, detail?: boolean) {
-        const tableNote = await this.prisma.tableNote.findUnique({
+    async getBoard(id: string, userId: string, detail?: boolean) {
+        const boardNote = await this.prisma.boardNote.findUnique({
             where: {
                 id: id,
             },
         });
-        if (!tableNote) {
-            throw new NotFoundException('Table note not found');
+        if (!boardNote) {
+            throw new NotFoundException('board note not found');
         }
-        let table: Table | null = null;
-        if (tableNote.tableId) {
-            table = await this.prisma.table.findUnique({
-                where: { id: tableNote.tableId },
+        let board: Board | null = null;
+        if (boardNote.boardId) {
+            board = await this.prisma.board.findUnique({
+                where: { id: boardNote.boardId },
             });
         }
-        if (!table) {
-            throw new NotFoundException('Table not found');
+        if (!board) {
+            throw new NotFoundException('Board not found');
         }
         const note = await this.prisma.note.findUnique({
-            where: { id: tableNote.noteId },
+            where: { id: boardNote.noteId },
             include: {
                 noteEdits: {
                     select: {
@@ -210,10 +211,10 @@ export class TableService {
         if (!note) {
             throw new NotFoundException('Note not found');
         }
-        const isSourceNote = table.sourceNoteId === note.id;
+        const isSourceNote = board.sourceNoteId === note.id;
         if (!isSourceNote) {
             const sourceNote = await this.prisma.note.findUnique({
-                where: { id: table.sourceNoteId },
+                where: { id: board.sourceNoteId },
                 include: {
                     noteEdits: {
                         select: {
@@ -227,16 +228,10 @@ export class TableService {
             }
             const owner = sourceNote.userId === userId;
             if (!owner && (sourceNote.status === NoteStatus.private || (sourceNote.status === NoteStatus.access && !sourceNote.noteEdits.some(edit => edit.userId === userId)))) {
-                // throw new ForbiddenException('You are not allowed to access this note');
-                // return {
-                //     status: 'error',
-                //     message: 'You are not allowed to access this note',
-                //     serverCode: 'TABLE_RELATION_ACCESS_DENIED'
-                // }
                 throw new BadRequestException({
                     status: 'error',
-                    message: 'cant access table relation. because source note is private or access',
-                    serverCode: 'TABLE_RELATION_ACCESS_DENIED'
+                    message: 'cant access board relation. because source note is private or access',
+                    serverCode: 'BOARD_RELATION_ACCESS_DENIED'
                 });
             }
         }
@@ -250,57 +245,44 @@ export class TableService {
         if (!isSourceNote) {
             canEdit = false;
         }
-        let cols: Col[] = [];
-        let rows: (Row & { rowData: RowData[] })[] = [];
+
         if (detail) {
-            cols = await this.prisma.col.findMany({
+            const boardColumns = await this.prisma.boardColumn.findMany({
                 where: {
-                    tableId: table.id
-                }
-            });
-            rows = await this.prisma.row.findMany({
-                where: {
-                    tableId: table.id
+                    boardId: board.id
                 },
                 include: {
-                    rowData: true
+                    cards: {
+                        orderBy: {
+                            position: 'asc'
+                        }
+                    }
                 }
             });
             return {
-                ...table,
+                ...board,
                 canEdit,
                 isSourceNote,
-                cols,
-                rows
+                columns: boardColumns
             }
         }
-
         return {
-            ...table,
+            ...board,
             canEdit,
             isSourceNote,
         };
     }
 
-    async updateTableName(id: string, data: UpdateTableNameDto, userId: string) {
-        // const tableNote = await this.prisma.tableNote.findUnique({
-        //     where: {
-        //         id: id,
-        //     },
-        // });
-        // if (!tableNote) {
-        //     throw new NotFoundException('Table note not found');
-        // }
-
-        const table = await this.prisma.table.findUnique({
+    async updateBoardName(id: string, data: UpdateBoardNameDto, userId: string) {
+        const board = await this.prisma.board.findUnique({
             where: { id: id },
         });
-        if (!table) {
-            throw new NotFoundException('Table not found');
+        if (!board) {
+            throw new NotFoundException('Board not found');
         }
 
         const note = await this.prisma.note.findUnique({
-            where: { id: table.sourceNoteId },
+            where: { id: board.sourceNoteId },
             include: {
                 noteEdits: {
                     select: {
@@ -313,7 +295,7 @@ export class TableService {
         if (!note) {
             throw new NotFoundException('Note not found');
         }
-        const isSourceNote = table.sourceNoteId === note.id;
+        const isSourceNote = board.sourceNoteId === note.id;
         if (!isSourceNote) {
             throw new ForbiddenException('You are not allowed to edit this note');
         }
@@ -325,153 +307,28 @@ export class TableService {
             canEdit = true;
         }
 
-        const updatedTable = await this.prisma.table.update({
-            where: { id: table.id },
+        const updatedBoard = await this.prisma.board.update({
+            where: { id: board.id },
             data: {
                 name: data.name
             }
         });
 
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
             name: data.name,
             updatedAt: new Date(),
-            socketAction: 'updateTableName'
+            socketAction: 'updateBoardName'
         });
 
-        return { message: 'Table name updated successfully' };
+        return { message: 'Board name updated successfully' };
     }
 
-    //     async getTables(userId: string, sort?: string, filter?: string) {
-    //         if (filter === 'my') {
-    //             const notesWithTables = await this.noteService.getNotesWithSourceTables(userId);
-    //             return notesWithTables;
-    //         } else {
-    //             const tables = await this.prisma.table.findMany({
-    //                 where: {
-    //                     note: {
-    //                         OR: [
-    //                             { userId },
-    //                             { noteEdits: { some: { userId } }, status: { in: [NoteStatus.access, NoteStatus.public] } }
-    //                         ]
-    //                     }
-    //                 }
-    //             });
-    // // 
-    //         }
-    //     }
-    // async getTables(userId: string, filter?: string, sort?: string) {
-    //     // Dapatkan notes dengan noteblocks
-    //     let notes: (Note & { noteBlocks: NoteBlock[] })[] = [];
-    //     if (filter === 'favorite') {
-    //         notes = await this.prisma.note.findMany({
-    //             where: {
-    //                 noteUserFavorites: {
-    //                     some: {
-    //                         userId
-    //                     }
-    //                 }
-    //             },
-    //             include: {
-    //                 noteBlocks: true
-    //             },
-    //             orderBy: {
-    //                 updatedAt: 'desc'
-    //             }
-    //         });
-    //     } else if (filter === 'shared') {
-    //         notes = await this.prisma.note.findMany({
-    //             where: {
-    //                 noteEdits: {
-    //                     some: {
-    //                         userId
-    //                     }
-    //                 },
-    //                 status: { in: [NoteStatus.access, NoteStatus.public] }
-    //             },
-    //             include: {
-    //                 noteBlocks: true
-    //             },
-    //             orderBy: {
-    //                 updatedAt: 'desc'
-    //             }
-    //         });
-    //     } else {
-    //         notes = await this.prisma.note.findMany({
-    //             where: {
-    //                 userId
-    //             },
-    //             include: {
-    //                 noteBlocks: true
-    //             },
-    //             orderBy: {
-    //                 updatedAt: 'desc'
-    //             }
-    //         });
-    //     }
-
-    //     // Proses setiap note untuk mendapatkan table asli
-    //     const processedNotes = await Promise.all(notes.map(async (note) => {
-    //         // Filter noteBlocks yang bertipe table
-    //         const tableBlocks = note.noteBlocks.filter(block => block.type === BlockType.table);
-
-    //         // Dapatkan table notes untuk setiap block
-    //         const tableData = await Promise.all(tableBlocks.map(async (block) => {
-    //             if (!block.referenceId) return null;
-
-    //             // Dapatkan table note
-    //             const tableNote = await this.prisma.tableNote.findFirst({
-    //                 where: {
-    //                     id: block.referenceId,
-    //                     noteId: note.id  // Menggunakan noteId sebagai pengganti sourceNoteId
-    //                 },
-    //                 include: {
-    //                     table: true
-    //                 }
-    //             });
-
-    //             if (!tableNote || !tableNote.tableId) return null;
-
-    //             // Dapatkan table dengan data lengkap
-    //             const table = await this.prisma.table.findUnique({
-    //                 where: { id: tableNote.tableId },
-    //                 include: {
-    //                     // cols: true,
-    //                     // rows: {
-    //                     //     include: {
-    //                     //         rowData: true
-    //                     //     }
-    //                     // }
-    //                 }
-    //             });
-
-    //             if (!table) return null;
-
-    //             return {
-    //                 blockId: block.id,
-    //                 position: block.position,
-    //                 tableNote: tableNote,
-    //                 table: table
-    //             };
-    //         }));
-
-    //         // Filter out null values dan tambahkan ke note
-    //         const validTables = tableData.filter(item => item !== null);
-
-    //         return {
-    //             ...note,
-    //             tables: validTables
-    //         };
-    //     }));
-
-    //     return processedNotes;
-    // }
-
-    async getTables(userId: string, filter?: string, sort?: string, noteId?: string) {
-        // Dapatkan semua table yang dimiliki user
-        let tables: Table[] = [];
+    async getBoards(userId: string, filter?: string, sort?: string, noteId?: string) {
+        // Dapatkan semua board yang dimiliki user
+        let boards: Board[] = [];
         if (filter === 'favorite') {
-            tables = await this.prisma.table.findMany({
+            boards = await this.prisma.board.findMany({
                 where: {
                     note: {
                         noteUserFavorites: {
@@ -486,7 +343,7 @@ export class TableService {
                 }
             });
         } else if (filter === 'shared') {
-            tables = await this.prisma.table.findMany({
+            boards = await this.prisma.board.findMany({
                 where: {
                     note: {
                         noteEdits: {
@@ -503,14 +360,14 @@ export class TableService {
             });
         } else {
             if (noteId) {
-                // Dapatkan table yang dimiliki user tapi tidak ada di note tersebut
-                tables = await this.prisma.table.findMany({
+                // Dapatkan board yang dimiliki user tapi tidak ada di note tersebut
+                boards = await this.prisma.board.findMany({
                     where: {
                         note: {
                             userId,
-                            // Exclude tables that are already in this note
+                            // Exclude boards that are already in this note
                             NOT: {
-                                tableNotes: {
+                                boardNotes: {
                                     some: {
                                         noteId: noteId
                                     }
@@ -523,7 +380,7 @@ export class TableService {
                     }
                 });
             } else {
-                tables = await this.prisma.table.findMany({
+                boards = await this.prisma.board.findMany({
                     where: {
                         note: {
                             userId
@@ -535,21 +392,13 @@ export class TableService {
                 });
             }
         }
-        // const tables = await this.prisma.table.findMany({
-        //     where: {
-        //         userId
-        //     },
-        //     orderBy: {
-        //         updatedAt: 'desc'
-        //     }
-        // });
 
-        // Proses setiap table untuk mendapatkan notes yang menggunakannya
-        const processedTables = await Promise.all(tables.map(async (table) => {
-            // Dapatkan table notes yang menggunakan table ini
-            const tableNotes = await this.prisma.tableNote.findMany({
+        // Proses setiap board untuk mendapatkan notes yang menggunakannya
+        const processedBoards = await Promise.all(boards.map(async (board) => {
+            // Dapatkan board notes yang menggunakan board ini
+            const boardNotes = await this.prisma.boardNote.findMany({
                 where: {
-                    tableId: table.id
+                    boardId: board.id
                 },
                 include: {
                     note: {
@@ -566,21 +415,21 @@ export class TableService {
                 }
             });
 
-            // Filter notes yang valid (notes yang memiliki block table yang mengacu ke tableNote ini)
-            const validNotes = await Promise.all(tableNotes.map(async (tableNote) => {
-                // Cari block yang mengacu ke tableNote ini
+            // Filter notes yang valid (notes yang memiliki block board yang mengacu ke boardNote ini)
+            const validNotes = await Promise.all(boardNotes.map(async (boardNote) => {
+                // Cari block yang mengacu ke boardNote ini
                 const block = await this.prisma.noteBlock.findFirst({
                     where: {
-                        noteId: tableNote.noteId,
-                        type: BlockType.table,
-                        referenceId: tableNote.id
+                        noteId: boardNote.noteId,
+                        type: BlockType.board,
+                        referenceId: boardNote.id
                     }
                 });
 
                 if (!block) return null;
 
                 return {
-                    ...tableNote.note,
+                    ...boardNote.note,
                     blockId: block.id,
                     position: block.position
                 };
@@ -590,241 +439,361 @@ export class TableService {
             const notes = validNotes.filter(note => note !== null);
 
             return {
-                ...table,
-                type: BlockType.table,
+                ...board,
+                type: BlockType.board,
                 notes: notes
             };
         }));
 
-        return processedTables;
+        return processedBoards;
     }
 
-    async updateRowData(id: string, data: UpdateRowDataDto, userId: string) {
-        const rowData = await this.prisma.rowData.findUnique({
-            where: {
-                id: id
-            }
-        });
-        if (!rowData) {
-            throw new NotFoundException('Row data not found');
-        }
-        const row = await this.prisma.row.findUnique({
-            where: {
-                id: rowData.rowId
-            }
-        });
-        if (!row) {
-            throw new NotFoundException('Row not found');
-        }
-        const { table, note, canEdit } = await this.getTableNote(row.tableId, userId);
+    async createColumn(id: string, userId: string) {
+        const { board, note, canEdit } = await this.getBoardNote(id, userId);
 
-        const updatedRowData = await this.prisma.rowData.update({
+        const lastColumn = await this.prisma.boardColumn.findFirst({
             where: {
-                id: rowData.id
+                boardId: board.id
             },
-            data: {
-                content: data.content
+            orderBy: {
+                position: 'desc'
             }
         });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            updatedRowData,
-            updatedAt: new Date(),
-            socketAction: 'updateRowData'
+        const newColumn = await this.prisma.boardColumn.create({
+            data: {
+                boardId: board.id,
+                position: lastColumn ? lastColumn.position + 1 : 1
+            },
+            include: {
+                cards: true
+            }
         });
-        return updatedRowData;
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            newColumn,
+            updatedAt: new Date(),
+            socketAction: 'createColumn'
+        });
+        return newColumn;
     }
 
-    async updateCol(id: string, data: UpdateColDto, userId: string) {
-        const col = await this.prisma.col.findUnique({
+    async updateColumn(id: string, data: UpdateColumnDto, userId: string) {
+        const column = await this.prisma.boardColumn.findUnique({
             where: {
                 id: id
             }
         });
-        if (!col) {
-            throw new NotFoundException('Col not found');
+        if (!column) {
+            throw new NotFoundException('Column not found');
         }
-        const { table, note, canEdit } = await this.getTableNote(col.tableId, userId);
+        const { board, note, canEdit } = await this.getBoardNote(column.boardId, userId);
 
-        const updatedCol = await this.prisma.col.update({
+        const updatedColumn = await this.prisma.boardColumn.update({
             where: {
-                id: col.id
+                id: column.id
             },
             data: {
                 title: data.title
             }
         });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            updatedCol,
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            updatedColumn,
             updatedAt: new Date(),
-            socketAction: 'updateCol'
+            socketAction: 'updateColumn'
         });
-        return updatedCol;
+        return updatedColumn;
     }
 
-    async createCol(id: string, userId: string) {
-        const { table, note, canEdit } = await this.getTableNote(id, userId);
-
-        const newCol = await this.prisma.col.create({
-            data: {
-                tableId: table.id,
-            }
-        });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            newCol,
-            updatedAt: new Date(),
-            socketAction: 'createCol'
-        });
-        return newCol;
-    }
-
-    async deleteCol(id: string, userId: string) {
-        const col = await this.prisma.col.findUnique({
+    async deleteColumn(id: string, userId: string) {
+        const column = await this.prisma.boardColumn.findUnique({
             where: {
                 id: id
             }
         });
-        if (!col) {
-            throw new NotFoundException('Col not found');
+        if (!column) {
+            throw new NotFoundException('Column not found');
         }
-        const { table, note, canEdit } = await this.getTableNote(col.tableId, userId);
-
-        const deletedCol = await this.prisma.col.delete({
+        const { board, note, canEdit } = await this.getBoardNote(column.boardId, userId);
+        const deletedColumn = await this.prisma.boardColumn.delete({
             where: {
-                id: col.id
+                id: column.id
             }
-        });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            deletedCol,
-            updatedAt: new Date(),
-            socketAction: 'deleteCol'
-        });
-        return deletedCol;
-    }
-
-    async createRow(id: string, userId: string) {
-        const { table, note, canEdit } = await this.getTableNote(id, userId);
-
-        const lastRow = await this.prisma.row.findFirst({
+        });    
+        // Dapatkan semua kolom yang tersisa dan urutkan berdasarkan posisi
+        const remainingColumns = await this.prisma.boardColumn.findMany({
             where: {
-                tableId: table.id
+                boardId: board.id
             },
             orderBy: {
-                rowNumber: 'desc'
+                position: 'asc'
             }
+        });    
+        // Update posisi untuk semua kolom yang tersisa
+        const updatePositionPromises = remainingColumns.map((col, index) =>
+            this.prisma.boardColumn.update({
+                where: {
+                    id: col.id
+                },
+                data: {
+                    position: index + 1
+                }
+            })
+        );    
+        // Jalankan semua update secara parallel
+        await Promise.all(updatePositionPromises);        
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            deletedColumn,
+            updatedColumns: remainingColumns.map((col, index) => ({
+                ...col,
+                position: index + 1
+            })),
+            updatedAt: new Date(),
+            socketAction: 'deleteColumn'
         });
-        const newRow = await this.prisma.row.create({
-            data: {
-                tableId: table.id,
-                rowNumber: lastRow ? lastRow.rowNumber + 1 : 1
+        return deletedColumn;
+    }
+
+    async createCard(id: string, data: CreateCardDto, userId: string) {
+        const { board, note, canEdit } = await this.getBoardNote(id, userId);
+        const lastCard = await this.prisma.boardCard.findFirst({
+            where: {
+                boardColumnId: data.columnId
             },
-            include: {
-                rowData: true
+            orderBy: {
+                position: 'desc'
             }
         });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            newRow,
-            updatedAt: new Date(),
-            socketAction: 'createRow'
-        });
-        return newRow;
-    }
-
-    async deleteRow(id: string, userId: string) {
-        const row = await this.prisma.row.findUnique({
-            where: {
-                id: id
-            }
-        });
-
-        if (!row) {
-            throw new NotFoundException('Row not found');
-        }
-
-        const { table, note, canEdit } = await this.getTableNote(row.tableId, userId);
-
-        const deletedRow = await this.prisma.row.delete({
-            where: {
-                id: row.id
-            }
-        });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            deletedRow,
-            updatedAt: new Date(),
-            socketAction: 'deleteRow'
-        });
-        return deletedRow;
-    }
-
-
-    async createRowData(id: string, data: CreateRowDataDto, userId: string) {
-        const { table, note, canEdit } = await this.getTableNote(id, userId);
-
-        const rowData = await this.prisma.rowData.create({
+        const newCard = await this.prisma.boardCard.create({
             data: {
-                rowId: data.rowId,
-                colId: data.colId,
-                content: data.content
+                boardColumnId: data.columnId,
+                position: lastCard ? lastCard.position + 1 : 1
             }
         });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            newRowData: rowData,
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            newCard,
             updatedAt: new Date(),
-            socketAction: 'createRowData'
+            socketAction: 'createCard'
         });
-        return rowData;
+        return newCard;
     }
 
-    async deleteRowData(id: string, userId: string) {
-        const rowData = await this.prisma.rowData.findUnique({
+    async updateCard(id: string, data: UpdateCardDto, userId: string) {
+        const card = await this.prisma.boardCard.findUnique({
             where: {
                 id: id
             }
         });
-        if (!rowData) {
-            throw new NotFoundException('Row data not found');
+        if (!card) {
+            throw new NotFoundException('Card not found');
         }
-        const row = await this.prisma.row.findUnique({
-            where: { id: rowData.rowId }
+        const column = await this.prisma.boardColumn.findUnique({
+            where: {
+                id: card.boardColumnId
+            }
         })
-        if (!row) {
-            throw new NotFoundException('Row not found');
+        if (!column) {
+            throw new NotFoundException('Column not found');
         }
-        const { table, note, canEdit } = await this.getTableNote(row.tableId, userId);
+        const { board, note, canEdit } = await this.getBoardNote(column.boardId, userId);
+        const updatedCard = await this.prisma.boardCard.update({
+            where: {
+                id: card.id
+            },
+            data: {
+                title: data.title,
+                description: data.description
+            }
+        });
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            updatedCard,
+            updatedAt: new Date(),
+            socketAction: 'updateCard'
+        });
+        return updatedCard;
+    }
 
-        const deletedRowData = await this.prisma.rowData.delete({
+    async deleteCard(id: string, userId: string) {
+        const card = await this.prisma.boardCard.findUnique({
             where: {
                 id: id
             }
         });
-        await this.tableGateway.sendTableUpdated(table.id, userId, {
-            id: table.id,
-            deletedRowData,
+        if (!card) {
+            throw new NotFoundException('Card not found');
+        }
+        const column = await this.prisma.boardColumn.findUnique({
+            where: {
+                id: card.boardColumnId
+            }
+        })
+        if (!column) {
+            throw new NotFoundException('Column not found');
+        }
+        const { board, note, canEdit } = await this.getBoardNote(column.boardId, userId);
+        const deletedCard = await this.prisma.boardCard.delete({
+            where: {
+                id: card.id
+            }
+        });    
+        // Dapatkan semua card yang tersisa dalam kolom yang sama
+        const remainingCards = await this.prisma.boardCard.findMany({
+            where: {
+                boardColumnId: card.boardColumnId
+            },
+            orderBy: {
+                position: 'asc'
+            }
+        });    
+        // Update posisi untuk semua card yang tersisa
+        const updatePositionPromises = remainingCards.map((c, index) =>
+            this.prisma.boardCard.update({
+                where: {
+                    id: c.id
+                },
+                data: {
+                    position: index + 1
+                }
+            })
+        );    
+        // Jalankan semua update secara parallel
+        await Promise.all(updatePositionPromises);    
+        await this.boardGateway.sendBoardUpdated(board.id, userId, {
+            id: board.id,
+            deletedCard,
+            updatedCards: remainingCards.map((c, index) => ({
+                ...c,
+                position: index + 1
+            })),
             updatedAt: new Date(),
-            socketAction: 'deleteRowData'
+            socketAction: 'deleteCard'
         });
-        return deletedRowData;
+        return deletedCard;
     }
 
+    async updateCardPosition(id: string, data: UpdateCardPositionDto, userId: string) {
+        const card = await this.prisma.boardCard.findUnique({
+            where: { id }
+        });
+        if (!card) {
+            throw new NotFoundException('Card not found');
+        }
+        const column = await this.prisma.boardColumn.findUnique({
+            where: { id: card.boardColumnId }
+        });
+        if (!column) {
+            throw new NotFoundException('Column not found');
+        }
+        const { board, note, canEdit } = await this.getBoardNote(column.boardId, userId);
+        // Moving to different column
+        if (column.id !== data.columnId) {
+            const newColumn = await this.prisma.boardColumn.findUnique({
+                where: { id: data.columnId }
+            });
+            if (!newColumn) {
+                throw new NotFoundException('New column not found');
+            }
+            // Get cards in target column
+            const cardsInNewColumn = await this.prisma.boardCard.findMany({
+                where: { boardColumnId: data.columnId },
+                orderBy: { position: 'asc' }
+            });
+            // Move card to new position in new column
+            await this.prisma.boardCard.update({
+                where: { id: card.id },
+                data: { 
+                    boardColumnId: data.columnId,
+                    position: data.position 
+                }
+            });
+            // Reorder cards in new column
+            const updatedCardsNewColumn = [...cardsInNewColumn];
+            updatedCardsNewColumn.splice(data.position - 1, 0, { ...card, boardColumnId: data.columnId });
+            
+            const updateNewColumnPromises = updatedCardsNewColumn.map((c, index) => 
+                this.prisma.boardCard.update({
+                    where: { id: c.id },
+                    data: { position: index + 1 }
+                })
+            );
+            // Get and reorder cards in original column
+            const cardsInOldColumn = await this.prisma.boardCard.findMany({
+                where: { 
+                    boardColumnId: column.id,
+                    NOT: { id: card.id }
+                },
+                orderBy: { position: 'asc' }
+            });
+            const updateOldColumnPromises = cardsInOldColumn.map((c, index) => 
+                this.prisma.boardCard.update({
+                    where: { id: c.id },
+                    data: { position: index + 1 }
+                })
+            );
+            await Promise.all([...updateNewColumnPromises, ...updateOldColumnPromises]);
+            await this.boardGateway.sendBoardUpdated(board.id, userId, {
+                id: board.id,
+                updatedCards: {
+                    id: card.id,
+                    fromColumnId: column.id,
+                    toColumnId: data.columnId,
+                    oldColumnCards: cardsInOldColumn,
+                    newColumnCards: updatedCardsNewColumn
+                },
+                updatedAt: new Date(),
+                socketAction: 'updateCardPositionAndColumn'
+            });
+        } 
+        // Moving within same column
+        else {
+            const cards = await this.prisma.boardCard.findMany({
+                where: { boardColumnId: column.id },
+                orderBy: { position: 'asc' }
+            });
+            // Remove card from current position and insert at new position
+            const cardsWithoutMoved = cards.filter(c => c.id !== card.id);
+            cardsWithoutMoved.splice(data.position - 1, 0, card);
+            // Update all positions
+            const updatePromises = cardsWithoutMoved.map((c, index) => 
+                this.prisma.boardCard.update({
+                    where: { id: c.id },
+                    data: { position: index + 1 }
+                })
+            );
+            await Promise.all(updatePromises);
 
-    private async getTableNote(tableId: string, userId: string) {
-        const table = await this.prisma.table.findUnique({
+            // Update position in memory for socket data
+            const updatedCards = cardsWithoutMoved.map((c, index) => ({
+                ...c,
+                position: index + 1
+            }));
+
+            await this.boardGateway.sendBoardUpdated(board.id, userId, {
+                id: board.id,
+                columnId: column.id,
+                updatedCards,
+                updatedAt: new Date(),
+                socketAction: 'updateCardPosition'
+            });
+        }
+        return { message: 'Card position updated successfully' };
+    }
+
+    private async getBoardNote(boardId: string, userId: string) {
+        const board = await this.prisma.board.findUnique({
             where: {
-                id: tableId
+                id: boardId
             }
         });
-        if (!table) {
-            throw new NotFoundException('Table not found');
+        if (!board) {
+            throw new NotFoundException('Board not found');
         }
         const note = await this.prisma.note.findUnique({
             where: {
-                id: table.sourceNoteId
+                id: board.sourceNoteId
             },
             include: {
                 noteEdits: {
@@ -849,24 +818,24 @@ export class TableService {
             throw new ForbiddenException('You are not allowed to edit this note');
         }
         return {
-            table,
+            board,
             note,
             canEdit
         };
     }
 
-    async deleteTable(id: string, userId: string) {
-        const tableNote = await this.prisma.tableNote.findUnique({
+    async deleteBoard(id: string, userId: string) {
+        const boardNote = await this.prisma.boardNote.findUnique({
             where: {
                 id: id,
             },
         });
-        if (!tableNote) {
-            throw new NotFoundException('Table note not found');
+        if (!boardNote) {
+            throw new NotFoundException('Board note not found');
         }
-        console.log('tableNote: ', tableNote);
+        console.log('boardNote: ', boardNote);
         const note = await this.prisma.note.findUnique({
-            where: { id: tableNote.noteId },
+            where: { id: boardNote.noteId },
             include: {
                 noteEdits: {
                     select: {
@@ -879,13 +848,13 @@ export class TableService {
         if (!note) {
             throw new NotFoundException('Note not found');
         }
-        let table: Table | null = null;
-        if (tableNote.tableId) {
-            table = await this.prisma.table.findUnique({
-                where: { id: tableNote.tableId },
+        let board: Board | null = null;
+        if (boardNote.boardId) {
+            board = await this.prisma.board.findUnique({
+                where: { id: boardNote.boardId },
             });
         }
-        if (!table) {
+        if (!board) {
             const owner = note.userId === userId;
             if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
                 throw new ForbiddenException('You are not allowed to access this note');
@@ -894,18 +863,18 @@ export class TableService {
                 canEdit = true;
             }
             if (!canEdit) {
-                throw new ForbiddenException('You are not allowed to delete this table');
+                throw new ForbiddenException('You are not allowed to delete this board');
             }
             const deletedNoteBlock = await this.prisma.noteBlock.deleteMany({
                 where: {
-                    referenceId: tableNote.id
+                    referenceId: boardNote.id
                 }
             });
             const updatedBlockPosition = await this.noteService.reorderNoteBlocks(note.id);
 
-            const deletedTableNote = await this.prisma.tableNote.delete({
+            const deletedBoardNote = await this.prisma.boardNote.delete({
                 where: {
-                    id: tableNote.id
+                    id: boardNote.id
                 }
             });
             await this.noteGateway.sendNoteUpdated(note.id, userId, {
@@ -913,15 +882,15 @@ export class TableService {
                 updatedAt: new Date(),
                 socketAction: 'deleteBlock',
                 deletedBlock: {
-                    id: tableNote.id,
-                    referenceId: tableNote.id,
+                    id: boardNote.id,
+                    referenceId: boardNote.id,
                 },
                 updatedBlockPosition
             })
 
-            return { message: 'Table relation deleted successfully. but table not found' };
+            return { message: 'Board relation deleted successfully. but board not found' };
         }
-        const isSourceNote = table.sourceNoteId === note.id;
+        const isSourceNote = board.sourceNoteId === note.id;
         if (!isSourceNote) {
             const relationNote = await this.prisma.note.findUnique({
                 where: { id: note.id },
@@ -944,20 +913,20 @@ export class TableService {
                 canEdit = true;
             }
             if (!canEdit) {
-                throw new ForbiddenException('You are not allowed to delete this table');
+                throw new ForbiddenException('You are not allowed to delete this board');
             }
             const deletedNoteBlock = await this.prisma.noteBlock.deleteMany({
                 where: {
-                    referenceId: tableNote.id
+                    referenceId: boardNote.id
                 }
             });
 
             // Rapihkan posisi note block yang tersisa
             const updatedBlockPosition = await this.noteService.reorderNoteBlocks(note.id);
 
-            const deletedTableNote = await this.prisma.tableNote.delete({
+            const deletedBoardNote = await this.prisma.boardNote.delete({
                 where: {
-                    id: tableNote.id
+                    id: boardNote.id
                 }
             });
             await this.noteGateway.sendNoteUpdated(note.id, userId, {
@@ -965,12 +934,12 @@ export class TableService {
                 updatedAt: new Date(),
                 socketAction: 'deleteBlock',
                 deletedBlock: {
-                    id: tableNote.id,
-                    referenceId: tableNote.id,
+                    id: boardNote.id,
+                    referenceId: boardNote.id,
                 },
                 updatedBlockPosition
             })
-            return { message: 'Table relation deleted successfully' };
+            return { message: 'Board relation deleted successfully' };
         }
         const owner = note.userId === userId;
         if (!owner && (note.status === NoteStatus.private || (note.status === NoteStatus.access && !note.noteEdits.some(edit => edit.userId === userId)))) {
@@ -980,37 +949,36 @@ export class TableService {
             canEdit = true;
         }
         if (!canEdit) {
-            throw new ForbiddenException('You are not allowed to delete this table');
+            throw new ForbiddenException('You are not allowed to delete this board');
         }
 
         const deletedNoteBlock = await this.prisma.noteBlock.deleteMany({
             where: {
-                referenceId: tableNote.id
+                referenceId: boardNote.id
             }
         });
 
         // Rapihkan posisi note block yang tersisa
         const updatedBlockPosition = await this.noteService.reorderNoteBlocks(note.id);
 
-        const deletedTableNote = await this.prisma.tableNote.delete({
+        const deletedBoardNote = await this.prisma.boardNote.delete({
             where: {
-                id: tableNote.id
+                id: boardNote.id
             }
         });
-        const deletedTable = await this.prisma.table.delete({
-            where: { id: table.id }
+        const deletedBoard = await this.prisma.board.delete({
+            where: { id: board.id }
         });
         await this.noteGateway.sendNoteUpdated(note.id, userId, {
             id: note.id,
             updatedAt: new Date(),
             socketAction: 'deleteBlock',
             deletedBlock: {
-                id: tableNote.id,
-                referenceId: tableNote.id,
+                id: boardNote.id,
+                referenceId: boardNote.id,
             },
             updatedBlockPosition
         })
-        return { message: 'Table deleted successfully' };
+        return { message: 'Board deleted successfully' };
     }
-
 }

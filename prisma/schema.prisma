@@ -56,6 +56,11 @@ model Note {
   editable  Editable   @default(me)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  due DateTime?
+  begin DateTime?
+  confirmDue Boolean @default(false)
+  
   tags NoteTag @default(todo)
 
   noteEdits  NoteEditAccess[]
@@ -66,7 +71,8 @@ model Note {
   tableNotes TableNote[]
   documents  Document[]
   documentNotes DocumentNote[]
-
+  boards Board[]
+  boardNotes BoardNote[]
   PostGroup    PostGroup[]
   noteUserOpen NoteUserOpen[]
 }
@@ -91,7 +97,7 @@ model NoteBlock {
 enum BlockType {
   document
   table
-  postGroup
+  board
 }
 
 model NoteUserOpen {
@@ -158,6 +164,52 @@ model DocumentNote {
 }
 
 // end document
+
+
+// board
+model Board {
+  id String @id @default(uuid())
+  sourceNoteId String // digunakan untuk mengindikasikan board ini dibuat dari note mana
+  note         Note     @relation(fields: [sourceNoteId], references: [id], onDelete: Cascade)
+  name String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boardNotes BoardNote[]
+  boardColumns BoardColumn[]
+}
+
+model BoardNote {
+  id String @id @default(uuid())
+  boardId String?
+  board Board? @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId String
+}
+
+model BoardColumn {
+  id String @id @default(uuid())
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  boardId String
+  title String?
+  position Int
+
+  cards BoardCard[]
+}
+
+model BoardCard {
+  id String @id @default(uuid())
+  boardColumn BoardColumn @relation(fields: [boardColumnId], references: [id], onDelete: Cascade)
+  boardColumnId String
+  title String?
+  description String?
+  position Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// end board
+
 // table
 model Table {
   id           String   @id @default(uuid())
